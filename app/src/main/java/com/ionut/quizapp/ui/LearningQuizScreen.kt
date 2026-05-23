@@ -6,8 +6,10 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -38,6 +40,16 @@ fun LearningQuizScreen(
     val currentQuestion = viewModel.questions.getOrNull(viewModel.currentLearningIndex)
 
     var showExitDialog by remember { mutableStateOf(false) }
+
+    var showExplanationSheet by remember { mutableStateOf(false) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    // Când AI-ul răspunde cu succes, declanșăm deschiderea sertarului
+    LaunchedEffect(viewModel.aiExplanation) {
+        if (viewModel.aiExplanation != null) {
+            showExplanationSheet = true
+        }
+    }
 
     // Dialog de ieșire personalizat (Modern M3 Design)
     if (showExitDialog) {
@@ -114,8 +126,8 @@ fun LearningQuizScreen(
 
                     // BUTONUL MAGIC GEMINI AI EXPLAIN
                     Button(
-                        onClick = { /* Aici vom lega funcția nativă de Gemini */ },
-                        enabled = viewModel.isLearningAnswerLocked, // Se activează DOAR după ce userul a încercat să răspundă
+                        onClick = { viewModel.generateAiExplanation() },
+                        enabled = viewModel.isLearningAnswerLocked && !viewModel.isAiLoading,
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFF6200EE), // Culoare dedicată AI (Royal Purple)
@@ -126,7 +138,16 @@ fun LearningQuizScreen(
                         elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp),
                         modifier = Modifier.height(48.dp)
                     ) {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
+                        if (viewModel.isAiLoading) {
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
+                        }
+
                         Spacer(Modifier.width(8.dp))
                         Text("AI EXPLAIN", fontWeight = FontWeight.Black, letterSpacing = 0.5.sp)
                     }
@@ -168,11 +189,15 @@ fun LearningQuizScreen(
                     },
                     label = "QuestionTransition"
                 ) { targetQuestion ->
+
+                    val scrollState = rememberScrollState()
+
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(padding)
                             .padding(horizontal = 24.dp)
+                            .verticalScroll(scrollState)
                     ) {
                         Spacer(Modifier.height(12.dp))
 
@@ -244,9 +269,68 @@ fun LearningQuizScreen(
                                     onClick = { viewModel.submitLearningAnswer(option) }
                                 )
                             }
+
                         }
                     }
                 }
+            }
+        }
+    }
+
+    // --- AI EXPLANATION BOTTOM SHEET ---
+    if (showExplanationSheet && viewModel.aiExplanation != null) {
+        ModalBottomSheet(
+            onDismissRequest = {
+                showExplanationSheet = false
+                // Opțional: viewModel.aiExplanation = null dacă vrei să resetezi când se închide
+            },
+            sheetState = sheetState,
+            containerColor = colors.surface, // Se asortează cu tema ta
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 48.dp) // Spațiu generos jos
+            ) {
+                // Header-ul panoului
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = Color(0xFF6200EE).copy(alpha = 0.1f),
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = "AI Icon",
+                            tint = Color(0xFF6200EE),
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        text = "AI Explanation",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Black,
+                        color = colors.textMain
+                    )
+                }
+
+                Divider(color = colors.textSecondary.copy(alpha = 0.1f))
+                Spacer(Modifier.height(16.dp))
+
+                // Textul propriu-zis (acum are tot spațiul din lume)
+                Text(
+                    text = viewModel.aiExplanation ?: "",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    color = colors.textMain,
+                    lineHeight = 26.sp
+                )
             }
         }
     }

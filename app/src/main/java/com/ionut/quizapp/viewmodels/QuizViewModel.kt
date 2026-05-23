@@ -18,7 +18,8 @@ data class AnswerHistory(
 )
 
 class QuizViewModel(
-    private val repository: QuizRepository = QuizRepository()
+    private val repository: QuizRepository = QuizRepository(),
+    private val aiRepository: AiRepository = AiRepository()
 ) : ViewModel() {
 
     // --- 1. STATE-URI UI (COMPETITIVE & GENERAL) ---
@@ -231,6 +232,26 @@ class QuizViewModel(
         if (newIndex in questions.indices) {
             currentLearningIndex = newIndex
             prepareOptionsForLearning()
+        }
+    }
+
+    fun generateAiExplanation() {
+        // Prevenim spam-ul pe buton sau apelurile când nu avem întrebări
+        if (isAiLoading || questions.isEmpty()) return
+
+        val currentQuestion = questions[currentLearningIndex]
+
+        isAiLoading = true
+        aiExplanation = null // Resetăm o eventuală explicație anterioară
+
+        viewModelScope.launch {
+            // Trimitem doar ID-ul și contextul, exact cum am configurat în Edge Function
+            val explanation = aiRepository.getExplanation(
+                questionId = currentQuestion.id,
+                isUtm = isUtmMode
+            )
+            aiExplanation = explanation
+            isAiLoading = false
         }
     }
 
