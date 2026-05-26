@@ -17,6 +17,16 @@ import kotlinx.serialization.json.put
 
 class AuthViewModel : ViewModel() {
 
+    init {
+        viewModelScope.launch {
+            // Varianta alternativă dacă authState nu este recunoscut:
+            SupabaseClient.client.auth.sessionStatus.collect { event ->
+                fetchProfile()
+            }
+        }
+        fetchProfile()
+    }
+
     val currentUserId: String?
         get() = SupabaseClient.client.auth.currentUserOrNull()?.id
     fun signUp(userEmail: String, userPass: String, username: String, onResult: (Boolean) -> Unit) {

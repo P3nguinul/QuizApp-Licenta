@@ -26,6 +26,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.ionut.quizapp.auth.AuthViewModel
 import com.ionut.quizapp.ui.theme.QuizTheme
 import com.ionut.quizapp.viewmodels.LearningViewModel
 import com.ionut.quizapp.viewmodels.ProgressData
@@ -36,9 +38,11 @@ import com.ionut.quizapp.viewmodels.QuizViewModel
 fun LearningScreen(
     learningViewModel: LearningViewModel,
     quizViewModel: QuizViewModel,
+    authViewModel: AuthViewModel = viewModel(),
     isUtm: Boolean,
     onBack: () -> Unit,
-    onDifficultySelect: (String, String) -> Unit
+    onDifficultySelect: (String, String) -> Unit,
+    onLoginClick: () -> Unit
 ) {
     val colors = QuizTheme.colors
     val categories = if (isUtm) learningViewModel.utmCategoriesUI else learningViewModel.normalCategoriesUI
@@ -90,6 +94,12 @@ fun LearningScreen(
             ) {
                 item {
                     Column(modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)) {
+
+                        if (authViewModel.isCurrentUserGuest) {
+                            GuestWarningBanner(onLoginClick = onLoginClick)
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
+
                         Text(
                             text = "Your Progress",
                             style = MaterialTheme.typography.headlineMedium,

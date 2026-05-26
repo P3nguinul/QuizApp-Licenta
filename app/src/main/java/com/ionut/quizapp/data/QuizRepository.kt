@@ -1,10 +1,18 @@
 package com.ionut.quizapp.data
 
+import android.content.Context
+import android.net.Uri
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.rpc
+import io.github.jan.supabase.storage.storage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 
@@ -38,6 +46,32 @@ class QuizRepository {
                 }
                 order("id", order = io.github.jan.supabase.postgrest.query.Order.ASCENDING)
             }.decodeList<Question>()
+    }
+
+    suspend fun fetchCustomQuestions(quizId: String): List<Question> {
+        val response = SupabaseClient.client.from("custom_questions")
+            .select() {
+                filter {
+                    eq("quiz_id", quizId)
+                }
+            }.decodeList<JsonObject>() // Parsăm JSON-ul brut
+
+        // Mapăm formatul din baza de date în clasa ta Question
+        return response.map { item ->
+            val optionsArray = item["options"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList()
+            val correctAnswer = item["correct_answer"]?.jsonPrimitive?.content ?: ""
+
+            Question(
+                id = item["id"]?.jsonPrimitive?.content?.hashCode() ?: 0,
+                category = "Custom AI Quiz", // Categorie generică pentru teste custom
+                difficulty = "Medium", // Dificultate implicită
+                question_text = item["question_text"]?.jsonPrimitive?.content ?: "",
+                correct_answer = correctAnswer,
+                // Scoatem răspunsul corect din opțiuni pentru a lăsa doar incorrect_answers
+                incorrect_answers = optionsArray.filter { it != correctAnswer },
+                is_student_content = false
+            )
+        }
     }
 
     suspend fun fetchAllQuestionCounts(isUtm: Boolean): List<CategoryCountResponse> {
@@ -180,4 +214,35 @@ class QuizRepository {
         }
     }
 
+    private val pdfBucket = SupabaseClient.client.storage.from("pdf_uploads")
+
+    suspend fun uploadPdfForAi(fileName: String, fileBytes: ByteArray): String {
+        return withContext(Dispatchers.IO) {
+            try {
+                pdfBucket.upload(
+                    path = fileName,
+                    data = fileBytes,
+                    upsert = true
+                )
+
+                pdfBucket.publicUrl(fileName)
+            } catch (e: Exception) {
+                throw Exception("Failed to upload PDF: ${e.message}")
+            }
+        }
+    }
+
+    suspend fun deletePdf(fileName: String) {
+        withContext(Dispatchers.IO) {
+            try {
+                pdfBucket.delete(listOf(fileName))
+            } catch (e: Exception) {
+                // Erorile de ștergere sunt ignorate silențios
+            }
+        }
+    }
+}
+
+fun Uri.toByteArray(context: Context): ByteArray? {
+    return context.contentResolver.openInputStream(this)?.use { it.readBytes() }
 }

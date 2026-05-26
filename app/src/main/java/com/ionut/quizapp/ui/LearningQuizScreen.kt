@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,51 +28,127 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.ionut.quizapp.auth.AuthViewModel
 import com.ionut.quizapp.ui.theme.QuizTheme
 import com.ionut.quizapp.viewmodels.QuizViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LearningQuizScreen(
-    viewModel: QuizViewModel,
+    authViewModel: AuthViewModel = viewModel(),
+    quizViewModel: QuizViewModel = viewModel(),
     onExit: () -> Unit
 ) {
     val colors = QuizTheme.colors
-    val currentQuestion = viewModel.questions.getOrNull(viewModel.currentLearningIndex)
+    val currentQuestion = quizViewModel.questions.getOrNull(quizViewModel.currentLearningIndex)
 
     var showExitDialog by remember { mutableStateOf(false) }
 
     var showExplanationSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    // Când AI-ul răspunde cu succes, declanșăm deschiderea sertarului
-    LaunchedEffect(viewModel.aiExplanation) {
-        if (viewModel.aiExplanation != null) {
+    val isGuest by remember(authViewModel) {
+        derivedStateOf { authViewModel.isCurrentUserGuest }
+    }
+
+    LaunchedEffect(quizViewModel.aiExplanation) {
+        if (quizViewModel.aiExplanation != null) {
             showExplanationSheet = true
         }
     }
 
     // Dialog de ieșire personalizat (Modern M3 Design)
     if (showExitDialog) {
-        AlertDialog(
-            onDismissRequest = { showExitDialog = false },
-            confirmButton = {
-                Button(
-                    onClick = { viewModel.saveProgressAndExit { onExit() } },
-                    colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
-                    shape = RoundedCornerShape(12.dp)
-                ) { Text("Save & Exit", fontWeight = FontWeight.Bold) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showExitDialog = false }) {
-                    Text("Cancel", color = colors.textSecondary)
+        Dialog(onDismissRequest = { showExitDialog = false }) {
+            Surface(
+                shape = RoundedCornerShape(32.dp),
+                color = QuizTheme.colors.surface,
+                tonalElevation = 8.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 24.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(28.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Icoană dinamică (Exit sau Save)
+                    Surface(
+                        shape = CircleShape,
+                        color = if (isGuest) Color(0xFFFFEBEE) else colors.primary.copy(alpha = 0.1f),
+                        modifier = Modifier.size(72.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = if (isGuest) Icons.Default.Close else Icons.Default.Info,
+                                contentDescription = null,
+                                tint = if (isGuest) Color(0xFFE53935) else colors.primary,
+                                modifier = Modifier.size(36.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Text(
+                        text = if (isGuest) "Exit Learning Mode?" else "Save your progress?",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Black,
+                        color = QuizTheme.colors.textMain,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = if (isGuest)
+                            "You are using a Guest account, so your progress will not be saved. Are you sure you want to exit?"
+                        else
+                            "Your current position will be saved so you can resume learning later.",
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp,
+                        color = QuizTheme.colors.textSecondary,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(32.dp))
+
+                    // Buton Principal Confirmare
+                    Button(
+                        onClick = {
+                            showExitDialog = false
+                            quizViewModel.saveProgressAndExit(isGuest, onExit)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isGuest) Color(0xFFE53935) else colors.primary
+                        )
+                    ) {
+                        Text(
+                            text = if (isGuest) "EXIT WITHOUT SAVING" else "SAVE & EXIT",
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 15.sp,
+                            letterSpacing = 1.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Buton Secundar
+                    TextButton(
+                        onClick = { showExitDialog = false },
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) {
+                        Text("Continue Learning", color = QuizTheme.colors.textSecondary, fontWeight = FontWeight.Bold)
+                    }
                 }
-            },
-            title = { Text("Save your progress?", fontWeight = FontWeight.Black) },
-            text = { Text("Your current position will be saved so you can resume learning later.") },
-            shape = RoundedCornerShape(24.dp),
-            containerColor = colors.surface
-        )
+            }
+        }
     }
 
     Scaffold(
@@ -112,8 +189,8 @@ fun LearningQuizScreen(
                 ) {
                     // Săgeată Înapoi
                     FilledIconButton(
-                        onClick = { viewModel.navigateLearning(-1) },
-                        enabled = viewModel.currentLearningIndex > 0,
+                        onClick = { quizViewModel.navigateLearning(-1) },
+                        enabled = quizViewModel.currentLearningIndex > 0,
                         colors = IconButtonDefaults.filledIconButtonColors(
                             containerColor = colors.primary.copy(alpha = 0.1f),
                             contentColor = colors.primary,
@@ -126,8 +203,8 @@ fun LearningQuizScreen(
 
                     // BUTONUL MAGIC GEMINI AI EXPLAIN
                     Button(
-                        onClick = { viewModel.generateAiExplanation() },
-                        enabled = viewModel.isLearningAnswerLocked && !viewModel.isAiLoading,
+                        onClick = { quizViewModel.generateAiExplanation() },
+                        enabled = quizViewModel.isLearningAnswerLocked && !quizViewModel.isAiLoading,
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFF6200EE), // Culoare dedicată AI (Royal Purple)
@@ -138,7 +215,7 @@ fun LearningQuizScreen(
                         elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp),
                         modifier = Modifier.height(48.dp)
                     ) {
-                        if (viewModel.isAiLoading) {
+                        if (quizViewModel.isAiLoading) {
                             CircularProgressIndicator(
                                 color = Color.White,
                                 modifier = Modifier.size(18.dp),
@@ -154,8 +231,8 @@ fun LearningQuizScreen(
 
                     // Săgeată Înainte
                     FilledIconButton(
-                        onClick = { viewModel.navigateLearning(1) },
-                        enabled = viewModel.currentLearningIndex < viewModel.questions.size - 1,
+                        onClick = {quizViewModel.navigateLearning(1) },
+                        enabled = quizViewModel.currentLearningIndex < quizViewModel.questions.size - 1,
                         colors = IconButtonDefaults.filledIconButtonColors(
                             containerColor = colors.primary.copy(alpha = 0.1f),
                             contentColor = colors.primary,
@@ -170,14 +247,14 @@ fun LearningQuizScreen(
         },
         containerColor = colors.background
     ) { padding ->
-        if (viewModel.isLoading) {
+        if (quizViewModel.isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = colors.primary)
             }
-        } else if (viewModel.errorMessage != null) {
+        } else if (quizViewModel.errorMessage != null) {
             // Stat de eroare integrat în limba engleză
             Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text(text = viewModel.errorMessage ?: "Error", color = Color.Red, textAlign = TextAlign.Center)
+                Text(text = quizViewModel.errorMessage ?: "Error", color = Color.Red, textAlign = TextAlign.Center)
             }
         } else {
             currentQuestion?.let { q ->
@@ -208,7 +285,7 @@ fun LearningQuizScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "QUESTION ${viewModel.currentLearningIndex + 1} OF ${viewModel.questions.size}",
+                                text = "QUESTION ${quizViewModel.currentLearningIndex + 1} OF ${quizViewModel.questions.size}",
                                 style = MaterialTheme.typography.labelLarge,
                                 color = colors.textSecondary,
                                 fontWeight = FontWeight.Black
@@ -230,7 +307,7 @@ fun LearningQuizScreen(
                         Spacer(Modifier.height(8.dp))
 
                         LinearProgressIndicator(
-                            progress = { (viewModel.currentLearningIndex + 1).toFloat() / viewModel.questions.size },
+                            progress = { (quizViewModel.currentLearningIndex + 1).toFloat() / quizViewModel.questions.size },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(6.dp)
@@ -257,16 +334,16 @@ fun LearningQuizScreen(
                             verticalArrangement = Arrangement.spacedBy(14.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            viewModel.currentOptions.forEach { option ->
-                                val isSelected = viewModel.selectedLearningAnswer == option
+                            quizViewModel.currentOptions.forEach { option ->
+                                val isSelected = quizViewModel.selectedLearningAnswer == option
                                 val isCorrect = option == targetQuestion.correct_answer
 
                                 LearningOptionCard(
                                     option = option,
                                     isSelected = isSelected,
                                     isCorrect = isCorrect,
-                                    isLocked = viewModel.isLearningAnswerLocked,
-                                    onClick = { viewModel.submitLearningAnswer(option) }
+                                    isLocked = quizViewModel.isLearningAnswerLocked,
+                                    onClick = { quizViewModel.submitLearningAnswer(option) }
                                 )
                             }
 
@@ -278,7 +355,7 @@ fun LearningQuizScreen(
     }
 
     // --- AI EXPLANATION BOTTOM SHEET ---
-    if (showExplanationSheet && viewModel.aiExplanation != null) {
+    if (showExplanationSheet && quizViewModel.aiExplanation != null) {
         ModalBottomSheet(
             onDismissRequest = {
                 showExplanationSheet = false
@@ -320,12 +397,16 @@ fun LearningQuizScreen(
                     )
                 }
 
-                Divider(color = colors.textSecondary.copy(alpha = 0.1f))
+                HorizontalDivider(
+                    Modifier,
+                    DividerDefaults.Thickness,
+                    color = colors.textSecondary.copy(alpha = 0.1f)
+                )
                 Spacer(Modifier.height(16.dp))
 
                 // Textul propriu-zis (acum are tot spațiul din lume)
                 Text(
-                    text = viewModel.aiExplanation ?: "",
+                    text = quizViewModel.aiExplanation ?: "",
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium,
                     color = colors.textMain,

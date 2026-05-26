@@ -46,8 +46,9 @@ fun QuizScreen(
 
     // Încărcăm întrebările la pornire
     LaunchedEffect(Unit) {
-        // Trimitem și parametrul 'mode' pe care l-am adăugat în funcția loadQuestions din ViewModel
-        viewModel.loadQuestions(isUtm, categories.split(","), count, mode)
+        if (categories != "Custom") {
+            viewModel.loadQuestions(isUtm, categories.split(","), count, mode)
+        }
     }
 
     LaunchedEffect(viewModel.isGameOver) {

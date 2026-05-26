@@ -11,6 +11,18 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.jsonPrimitive
 
+import io.github.jan.supabase.storage.storage
+import io.github.jan.supabase.functions.functions
+import io.ktor.client.request.header
+import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
+
 data class AnswerHistory(
     val question: Question,
     val selectedAnswer: String,
@@ -22,7 +34,23 @@ class QuizViewModel(
     private val aiRepository: AiRepository = AiRepository()
 ) : ViewModel() {
 
-    // --- 1. STATE-URI UI (COMPETITIVE & GENERAL) ---
+    // =========================================================================================
+    // 1. STATE-URI GENERALE & GLOBALE
+    // =========================================================================================
+    var isLoading by mutableStateOf(false)
+    var errorMessage by mutableStateOf<String?>(null)
+
+    // State pentru Progress Map (folosit în ecranul de categorii)
+    var categoryProgressMap by mutableStateOf<Map<String, Float>>(emptyMap())
+        private set
+
+    private val currentUser get() = SupabaseClient.client.auth.currentUserOrNull()
+    private var lastCategories = listOf<String>()
+    private var lastIsUtm = false
+
+    // =========================================================================================
+    // 2. STATE-URI PENTRU MODURI COMPETITIVE (Classic, Timed, Sudden Death)
+    // =========================================================================================
     var questions = mutableStateListOf<Question>()
     var quizHistory = mutableStateListOf<AnswerHistory>()
     var currentOptions by mutableStateOf<List<String>>(emptyList())
@@ -32,8 +60,6 @@ class QuizViewModel(
     var score by mutableIntStateOf(0)
     val accuracy: Int get() = if (quizHistory.isNotEmpty()) (score * 100) / quizHistory.size else 0
 
-    var isLoading by mutableStateOf(false)
-    var errorMessage by mutableStateOf<String?>(null)
     var isGameOver by mutableStateOf(false)
     var isUtmMode by mutableStateOf(false)
     var isTimedMode by mutableStateOf(false)
@@ -41,28 +67,41 @@ class QuizViewModel(
     var timeLeft by mutableIntStateOf(60)
     var isNewHighScore by mutableStateOf(false)
 
-    // --- 2. STATE-URI UI (LEARNING & AI) ---
+    private var timerJob: Job? = null
+    private var currentGameLogic: GameModeLogic = GameModeLogic.Classic(10)
+
+    // =========================================================================================
+    // 3. STATE-URI PENTRU MODUL LEARNING (Studiu)
+    // =========================================================================================
     var isLearningMode by mutableStateOf(false)
     var currentLearningIndex by mutableIntStateOf(0)
     var isLearningAnswerLocked by mutableStateOf(false)
     var selectedLearningAnswer by mutableStateOf<String?>(null)
 
-    // State-uri pentru Gemini AI
+    // =========================================================================================
+    // 4. STATE-URI PENTRU AI & CUSTOM QUIZZES
+    // =========================================================================================
+    // State-uri pentru Gemini AI (Explicații Mod Learning)
     var aiExplanation by mutableStateOf<String?>(null)
     var isAiLoading by mutableStateOf(false)
 
-    // State pentru Progress Map (folosit în ecranul de categorii)
-    var categoryProgressMap by mutableStateOf<Map<String, Float>>(emptyMap())
+    // State-uri pentru Generarea Testelor din PDF
+    var isUploadingPdf by mutableStateOf(false)
+        private set
+    var pdfUploadMessage by mutableStateOf<String?>(null)
         private set
 
-    // --- 3. LOGICĂ INTERNĂ ---
-    private var timerJob: Job? = null
-    private var currentGameLogic: GameModeLogic = GameModeLogic.Classic(10)
-    private var lastCategories = listOf<String>()
-    private var lastIsUtm = false
-    private val currentUser get() = SupabaseClient.client.auth.currentUserOrNull()
-
-    // --- 4. MANAGEMENT STARE ---
+    var isGeneratingQuiz by mutableStateOf(false)
+        private set
+    var generateQuizError by mutableStateOf<String?>(null)
+        private set
+    var generateQuizSuccess by mutableStateOf(false)
+        private set
+    var generatedQuizId by mutableStateOf<String?>(null)
+        private set
+    // =========================================================================================
+    // 5. FUNCȚII DE BAZĂ (MANAGEMENT STARE)
+    // =========================================================================================
     fun resetQuizState() {
         isGameOver = false
         isNewHighScore = false
@@ -86,7 +125,14 @@ class QuizViewModel(
         timerJob = null
     }
 
-    // --- 5. LOGICĂ MODURI COMPETITIVE (CLASSIC, TIMED, SUDDEN DEATH) ---
+    override fun onCleared() {
+        super.onCleared()
+        timerJob?.cancel()
+    }
+
+    // =========================================================================================
+    // 6. LOGICĂ: MODURI COMPETITIVE
+    // =========================================================================================
     fun loadQuestions(isUtm: Boolean, selectedCategories: List<String>, count: Int, mode: String) {
         resetQuizState()
         isLoading = true
@@ -121,6 +167,46 @@ class QuizViewModel(
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
+                isGameOver = true
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    // =========================================================================================
+    // LOGICĂ: CUSTOM AI QUIZ
+    // =========================================================================================
+    fun loadCustomQuiz(quizId: String) {
+        resetQuizState()
+        isLoading = true
+
+        // Setăm regulile de bază (fără timer, ca un Classic Mode)
+        currentGameLogic = GameModeLogic.Classic(100) // Permitem până la 100 de întrebări
+        isTimedMode = false
+        isSuddenDeathMode = false
+        isUtmMode = false
+        isLearningMode = false
+
+        viewModelScope.launch {
+            try {
+                // Apelează funcția pe care tocmai am făcut-o perfectă în Repository
+                val customQuestions = repository.fetchCustomQuestions(quizId)
+
+                if (customQuestions.isNotEmpty()) {
+                    questions.clear()
+                    questions.addAll(customQuestions)
+                    totalQuestionsCount = customQuestions.size
+                    prepareCurrentOptions()
+
+                    isGameOver = false
+                } else {
+                    errorMessage = "Could not load the generated questions."
+                    isGameOver = true
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                errorMessage = "Error loading the quiz: ${e.message}"
                 isGameOver = true
             } finally {
                 isLoading = false
@@ -170,7 +256,9 @@ class QuizViewModel(
         }
     }
 
-    // --- 6. LOGICĂ MOD LEARNING ---
+    // =========================================================================================
+    // 7. LOGICĂ: MOD LEARNING
+    // =========================================================================================
     fun loadLearningQuestions(categoryUI: String, difficulty: String, isUtm: Boolean) {
         resetQuizState()
         isLoading = true
@@ -235,17 +323,17 @@ class QuizViewModel(
         }
     }
 
+    // =========================================================================================
+    // 8. LOGICĂ: AI & CUSTOM QUIZZES (GEMINI)
+    // =========================================================================================
     fun generateAiExplanation() {
-        // Prevenim spam-ul pe buton sau apelurile când nu avem întrebări
         if (isAiLoading || questions.isEmpty()) return
 
         val currentQuestion = questions[currentLearningIndex]
-
         isAiLoading = true
-        aiExplanation = null // Resetăm o eventuală explicație anterioară
+        aiExplanation = null
 
         viewModelScope.launch {
-            // Trimitem doar ID-ul și contextul, exact cum am configurat în Edge Function
             val explanation = aiRepository.getExplanation(
                 questionId = currentQuestion.id,
                 isUtm = isUtmMode
@@ -255,7 +343,165 @@ class QuizViewModel(
         }
     }
 
-    // --- 7. UTILITARE & SALVARE ---
+    fun uploadPdfForCustomQuiz(uri: android.net.Uri, context: android.content.Context) {
+        viewModelScope.launch {
+            isUploadingPdf = true
+            pdfUploadMessage = "Uploading PDF to Cloud..."
+
+            try {
+                val bytes = uri.toByteArray(context)
+                    ?: throw Exception("Could not read the file.")
+
+                val fileName = "quiz_doc_${System.currentTimeMillis()}.pdf"
+                val publicUrl = repository.uploadPdfForAi(fileName, bytes)
+
+                pdfUploadMessage = "Success! File uploaded."
+                println("PDF Uploaded. Public URL: $publicUrl")
+
+                // PASUL URMĂTOR: Apel Edge Function
+
+            } catch (e: Exception) {
+                pdfUploadMessage = "Upload error: ${e.message}"
+                e.printStackTrace()
+            } finally {
+                isUploadingPdf = false
+            }
+        }
+    }
+
+    fun resetPdfUploadState() {
+        isUploadingPdf = false
+        pdfUploadMessage = null
+    }
+
+    fun resetGenerateQuizState() {
+        generateQuizError = null
+        generateQuizSuccess = false
+        generatedQuizId = null
+    }
+
+    // --- FUNCȚIA DE GENERARE ---
+    fun generateQuizFromPdf(
+        fileBytes: ByteArray,
+        originalFileName: String,
+        userId: String,
+        quizTitle: String
+    ) {
+        viewModelScope.launch {
+            isGeneratingQuiz = true
+            generateQuizError = null
+            generateQuizSuccess = false
+            generatedQuizId = null
+
+            try {
+                // 1. Creăm un nume unic pentru fișier (UUID + Nume Original)
+                val uniqueFileName = "${java.util.UUID.randomUUID()}_${originalFileName}"
+                val filePath = "$userId/$uniqueFileName"
+
+                // 2. Urcăm fișierul în bucket-ul Supabase (AI-ul îl va șterge automat după)
+                // UITE AICI: FĂRĂ io.github.jan.supabase în față, doar SupabaseClient-ul tău!
+                SupabaseClient.client.storage
+                    .from("pdf_uploads")
+                    .upload(filePath, fileBytes)
+
+                // 3. Chemăm Edge Function-ul
+                val jsonBodyString = buildJsonObject {
+                    put("filePath", filePath)
+                    put("userId", userId)
+                    put("categoryName", quizTitle)
+                }.toString()
+
+                val response = SupabaseClient.client.functions.invoke("generate-custom-quiz") {
+                    setBody(jsonBodyString)
+                    header("Content-Type", "application/json")
+                }
+
+                // 4. Parsăm răspunsul serverului
+                val responseText = response.bodyAsText()
+                val responseData = Json.parseToJsonElement(responseText).jsonObject
+
+                val success = responseData["success"]?.jsonPrimitive?.booleanOrNull ?: false
+
+                if (success) {
+                    // Succes total!
+                    generateQuizSuccess = true
+                    generatedQuizId = responseData["quizId"]?.jsonPrimitive?.content
+                } else {
+                    // Eroare de la AI (Troll, invalid etc.)
+                    generateQuizError = responseData["error"]?.jsonPrimitive?.content ?: "Unknown error occurred during generation."
+                }
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+                generateQuizError = "Connection error: ${e.message}"
+            } finally {
+                isGeneratingQuiz = false
+            }
+        }
+    }
+
+    // =========================================================================================
+    // 9. LOGICĂ: SALVARE PROGRESS & STATISTICI
+    // =========================================================================================
+    private fun checkAndSaveScore() {
+        val user = currentUser
+        val isAnonymous = user?.appMetadata?.get("provider")?.jsonPrimitive?.content == "anonymous" || user == null
+        val shouldSave = isTimedMode || isSuddenDeathMode
+
+        if (!isAnonymous && user != null && shouldSave) {
+            viewModelScope.launch {
+                try {
+                    val username = user.userMetadata?.get("username")?.jsonPrimitive?.content ?: "Explorer"
+                    val modeName = if (isTimedMode) "Timed" else "Sudden Death"
+
+                    val result = repository.updateTopScore(
+                        userId = user.id,
+                        username = username,
+                        newScore = score,
+                        mode = modeName,
+                        isUtm = isUtmMode
+                    )
+                    isNewHighScore = result
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+    }
+
+    fun saveProgressAndExit(isGuest: Boolean, onComplete: () -> Unit) {
+        val user = currentUser
+        if (isLearningMode && questions.isNotEmpty() && !isGuest && user != null) {
+            viewModelScope.launch {
+                try {
+                    val currentQuestion = questions[currentLearningIndex]
+                    val progress = UserLearningProgress(
+                        userId = user.id,
+                        categoryName = currentQuestion.category,
+                        difficulty = currentQuestion.difficulty,
+                        lastQuestionIndex = currentLearningIndex,
+                        isUtm = isUtmMode
+                    )
+                    repository.saveLearningProgress(progress)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                } finally {
+                    resetQuizState()
+                    onComplete()
+                }
+            }
+        } else {
+            resetQuizState()
+            onComplete()
+        }
+    }
+
+    suspend fun getLeaderboard(mode: String, isUtm: Boolean) = repository.getGlobalLeaderboard(mode, isUtm)
+    suspend fun getPersonalBestScore(userId: String, mode: String, isUtm: Boolean) = repository.getPersonalBest(userId, mode, isUtm)
+
+    // =========================================================================================
+    // 10. UTILITARE PRIVATE
+    // =========================================================================================
     private fun startTimer() {
         timerJob?.cancel()
         timerJob = viewModelScope.launch {
@@ -281,83 +527,10 @@ class QuizViewModel(
         }
     }
 
-    private fun checkAndSaveScore() {
-        val user = currentUser
-
-        // 1. Verificăm dacă user-ul este null sau anonim (Guest)
-        val isAnonymous = user?.appMetadata?.get("provider")?.jsonPrimitive?.content == "anonymous" || user == null
-
-        // 2. Verificăm dacă suntem în modul Classic (nu salvăm scorul aici)
-        // Salvăm DOAR dacă este Timed sau Sudden Death
-        val shouldSave = isTimedMode || isSuddenDeathMode
-
-        if (!isAnonymous && user != null && shouldSave) {
-            viewModelScope.launch {
-                try {
-                    val username = user.userMetadata?.get("username")?.jsonPrimitive?.content ?: "Explorer"
-
-                    // Determinăm numele modului pentru baza de date
-                    val modeName = if (isTimedMode) "Timed" else "Sudden Death"
-
-                    val result = repository.updateTopScore(
-                        userId = user.id,
-                        username = username,
-                        newScore = score,
-                        mode = modeName,
-                        isUtm = isUtmMode
-                    )
-
-                    isNewHighScore = result
-
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
-        }
-    }
-
-    fun saveProgressAndExit(onComplete: () -> Unit) {
-        val user = currentUser
-        if (isLearningMode && questions.isNotEmpty() && user != null) {
-            viewModelScope.launch {
-                try {
-                    val currentQuestion = questions[currentLearningIndex]
-
-                    // Re-creăm obiectul folosind proprietățile native camelCase
-                    // stabilite în modelul nostru actualizat de date
-                    val progress = UserLearningProgress(
-                        userId = user.id,
-                        categoryName = currentQuestion.category, // Stochează denumirea DB
-                        difficulty = currentQuestion.difficulty,
-                        lastQuestionIndex = currentLearningIndex,
-                        isUtm = isUtmMode
-                    )
-                    repository.saveLearningProgress(progress)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                } finally {
-                    resetQuizState()
-                    onComplete()
-                }
-            }
-        } else {
-            resetQuizState()
-            onComplete()
-        }
-    }
-
     private fun prepareCurrentOptions() {
         if (questions.isNotEmpty()) {
             val q = questions[0]
             currentOptions = (q.incorrect_answers + q.correct_answer).shuffled()
         }
-    }
-
-    suspend fun getLeaderboard(mode: String, isUtm: Boolean) = repository.getGlobalLeaderboard(mode, isUtm)
-    suspend fun getPersonalBestScore(userId: String, mode: String, isUtm: Boolean) = repository.getPersonalBest(userId, mode, isUtm)
-
-    override fun onCleared() {
-        super.onCleared()
-        timerJob?.cancel()
     }
 }

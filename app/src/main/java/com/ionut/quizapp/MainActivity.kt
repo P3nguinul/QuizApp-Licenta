@@ -13,6 +13,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.ionut.quizapp.auth.AuthViewModel
 import com.ionut.quizapp.ui.LeaderboardScreen
 import com.ionut.quizapp.ui.LearningQuizScreen
 import com.ionut.quizapp.ui.LearningScreen
@@ -22,6 +23,7 @@ import com.ionut.quizapp.ui.LoginScreen
 import com.ionut.quizapp.ui.SignUpScreen
 import com.ionut.quizapp.ui.MainScreen
 import com.ionut.quizapp.ui.ProfileScreen
+import com.ionut.quizapp.ui.QuizGeneratorScreen
 import com.ionut.quizapp.ui.QuizScreen
 import com.ionut.quizapp.ui.ResultScreen
 import com.ionut.quizapp.viewmodels.LearningViewModel
@@ -34,6 +36,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val menuViewModel: MenuViewModel = viewModel()
             val quizViewModel: QuizViewModel = viewModel()
+            val authViewModel: AuthViewModel = viewModel()
             val isUtm = menuViewModel.isUtmMode
 
             QuizAppTheme(isUtmMode = isUtm) {
@@ -81,6 +84,12 @@ class MainActivity : ComponentActivity() {
                                 menuViewModel = menuViewModel,
                                 onNavigateToProfile = { navController.navigate("profile") },
                                 onNavigateToLeaderboard = { navController.navigate("leaderboard") },
+                                onNavigateToCustomQuiz = { navController.navigate("quiz_generator") },
+                                onNavigateToLogin = { // Navigarea nouă
+                                    navController.navigate("login") {
+                                        popUpTo("main_menu") { inclusive = true }
+                                    }
+                                },
                                 onStartQuiz = { mode, categories, isUtmFlag, count ->
                                     if (mode == "Learning") {
                                         // Navigăm către Hub-ul de Learning (cel cu carduri și progrese)
@@ -118,14 +127,37 @@ class MainActivity : ComponentActivity() {
                                 onDifficultySelect = { category, difficulty ->
                                     quizViewModel.loadLearningQuestions(category, difficulty, menuViewModel.isUtmMode)
                                     navController.navigate("learning_quiz")
+                                },
+                                onLoginClick = {
+                                    // Când apasă pe LOG IN din banner, îl trimitem la ecranul de login
+                                    // și curățăm stiva ca să nu dea back înapoi în zona de learning ca guest
+                                    navController.navigate("login") {
+                                        popUpTo("main_menu") { inclusive = true }
+                                    }
                                 }
                             )
                         }
 
                         composable("learning_quiz") {
                             LearningQuizScreen(
-                                viewModel = quizViewModel,
+                                quizViewModel = quizViewModel,
+                                authViewModel = authViewModel,
                                 onExit = { navController.popBackStack() }
+                            )
+                        }
+
+                        composable("quiz_generator") {
+                            QuizGeneratorScreen(
+                                viewModel = quizViewModel,
+                                onBack = { navController.popBackStack() },
+                                onNavigateToGame = {
+                                    val mode = "Classic"
+                                    val fakeCategory = "Custom"
+                                    val isUtmFlag = false
+                                    val count = 100 // Maximul permis
+
+                                    navController.navigate("quiz/$mode/$fakeCategory/$isUtmFlag/$count")
+                                }
                             )
                         }
 

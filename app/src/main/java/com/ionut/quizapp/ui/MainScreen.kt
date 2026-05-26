@@ -33,19 +33,24 @@ import com.ionut.quizapp.data.GameMode
 import com.ionut.quizapp.data.gameModes
 import com.ionut.quizapp.ui.theme.QuizTheme
 import com.ionut.quizapp.viewmodels.MenuViewModel
+import com.ionut.quizapp.viewmodels.QuizViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     onNavigateToProfile: () -> Unit,
     onNavigateToLeaderboard: () -> Unit,
+    onNavigateToCustomQuiz: () -> Unit,
+    onNavigateToLogin: () -> Unit,
     onStartQuiz: (mode: String, categories: List<String>, isUtm: Boolean, count: Int) -> Unit, // Am adăugat count aici
     authViewModel: AuthViewModel = viewModel(),
-    menuViewModel: MenuViewModel = viewModel()
+    menuViewModel: MenuViewModel = viewModel(),
+    quizViewModel: QuizViewModel = viewModel()
 ) {
     val isUtm = menuViewModel.isUtmMode
     var showDialog by remember { mutableStateOf(false) }
     var selectedMode by remember { mutableStateOf<GameMode?>(null) }
+    var showGuestPremiumDialog by remember { mutableStateOf(false) }
 
     val playfulColors = listOf(
         QuizTheme.colors.primary,
@@ -113,6 +118,7 @@ fun MainScreen(
 
                 Spacer(modifier = Modifier.height(32.dp))
 
+                // --- 1. GRILA DE MODURI DE JOC ---
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
                     modifier = Modifier.weight(1f),
@@ -125,13 +131,8 @@ fun MainScreen(
 
                         GameModeCard(mode, itemColor) {
                             if (mode.title == "Learning") {
-                                // DACĂ E LEARNING: Navigăm direct la ecranul de selecție
-                                // Nu setăm showDialog = true, deci modalul nu apare
                                 onStartQuiz("Learning", emptyList(), isUtm, 0)
-                                // ^ Notă: Aici onStartQuiz va trebui să aibă o logică în MainActivity
-                                // să știe că dacă primește "Learning", face navController.navigate("learning_selection")
                             } else {
-                                // DACĂ E ORICE ALT MOD: Deschis modalul normal
                                 selectedMode = mode
                                 showDialog = true
                             }
@@ -139,10 +140,59 @@ fun MainScreen(
                     }
                 }
 
-                // Switch-ul UTM
+                // --- 2. BUTON AI CUSTOM QUIZ (Afară din grilă) ---
+                Button(
+                    onClick = {
+                        // Înlocuiește quizViewModel.isUserGuest cu authViewModel.isCurrentUserGuest
+                        if (authViewModel.isCurrentUserGuest) {
+                            showGuestPremiumDialog = true
+                        } else {
+                            onNavigateToCustomQuiz()
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(64.dp)
+                        .padding(bottom = 12.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF6200EE)
+                    ),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = "AI",
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        text = "GENERATE QUIZ FROM PDF",
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 1.sp,
+                        fontSize = 16.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // --- 3. SWITCH-UL UTM ---
                 UTMModeSwitch(isUtm) { menuViewModel.toggleUtmMode(it) }
             }
         }
+    }
+
+    // --- DIALOGUL PREMIUM PENTRU GUESTS ---
+    if (showGuestPremiumDialog) {
+        LoginRequiredDialog(
+            featureName = "AI Quiz Generator",
+            description = "Unlock the power of Gemini AI to create custom quizzes directly from your PDF documents. Save them to your private library and study smarter!",
+            onDismiss = { showGuestPremiumDialog = false },
+            onGoToLogin = {
+                showGuestPremiumDialog = false
+                onNavigateToLogin()
+            }
+        )
     }
 
     // --- MODALUL REPROIECTAT ---
@@ -189,7 +239,6 @@ fun MainScreen(
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    // Dropdown-ul cu instanța corectă
                     if (selectedMode!!.title != "Against Time" && selectedMode!!.title != "Sudden Death") {
                         QuestionCountDropdown(menuViewModel)
                         Spacer(modifier = Modifier.height(20.dp))
@@ -198,7 +247,6 @@ fun MainScreen(
                     Spacer(modifier = Modifier.height(20.dp))
                     Text("Categories:", fontWeight = FontWeight.Bold, color = QuizTheme.colors.textMain)
 
-                    // Categorii stilizate sub formă de carduri în interiorul listei
                     Box(modifier = Modifier.height(200.dp).padding(top = 8.dp)) {
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(categoriesList) { category ->
@@ -229,7 +277,6 @@ fun MainScreen(
     }
 }
 
-// Componentă extrasă pentru curățenie
 @Composable
 fun UTMModeSwitch(isUtm: Boolean, onToggle: (Boolean) -> Unit) {
     Surface(
@@ -249,14 +296,11 @@ fun UTMModeSwitch(isUtm: Boolean, onToggle: (Boolean) -> Unit) {
                 onCheckedChange = onToggle,
                 modifier = Modifier.scale(0.7f),
                 colors = SwitchDefaults.colors(
-                    // Când e ON (UTM Mode)
-                    checkedThumbColor = Color.White, // Bulina albă pentru contrast maxim
-                    checkedTrackColor = QuizTheme.colors.primary, // Șanțul mov
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = QuizTheme.colors.primary,
                     checkedBorderColor = QuizTheme.colors.primary,
-
-                    // Când e OFF (Normal Mode)
-                    uncheckedThumbColor = QuizTheme.colors.primary, // Bulina mov/roz
-                    uncheckedTrackColor = QuizTheme.colors.primary.copy(alpha = 0.1f), // Șanțul pal
+                    uncheckedThumbColor = QuizTheme.colors.primary,
+                    uncheckedTrackColor = QuizTheme.colors.primary.copy(alpha = 0.1f),
                     uncheckedBorderColor = QuizTheme.colors.primary.copy(alpha = 0.5f)
                 )
             )
@@ -323,7 +367,7 @@ fun QuestionCountDropdown(menuViewModel: MenuViewModel) {
             OutlinedTextField(
                 value = menuViewModel.questionCount.toString(),
                 onValueChange = {},
-                readOnly = true, // Utilizatorul nu scrie, doar alege
+                readOnly = true,
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = menuViewModel.isExpended) },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -370,4 +414,3 @@ fun getIconForMode(title: String): ImageVector {
         else -> Icons.Default.Quiz
     }
 }
-
