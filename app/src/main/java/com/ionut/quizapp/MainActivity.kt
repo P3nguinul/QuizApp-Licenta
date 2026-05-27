@@ -112,7 +112,11 @@ class MainActivity : ComponentActivity() {
                                         popUpTo("main_menu") { inclusive = true }
                                     }
                                 },
-                                onBack = { navController.popBackStack() }
+                                onBack = { navController.popBackStack() },
+                                onNavigateToGame = {
+                                    // Trimitem utilizatorul direct în ecranul de studiu/learning!
+                                    navController.navigate("learning_quiz")
+                                }
                             )
                         }
 
@@ -151,12 +155,8 @@ class MainActivity : ComponentActivity() {
                                 viewModel = quizViewModel,
                                 onBack = { navController.popBackStack() },
                                 onNavigateToGame = {
-                                    val mode = "Classic"
-                                    val fakeCategory = "Custom"
-                                    val isUtmFlag = false
-                                    val count = 100 // Maximul permis
-
-                                    navController.navigate("quiz/$mode/$fakeCategory/$isUtmFlag/$count")
+                                    // Navigăm direct către ecranul de Learning!
+                                    navController.navigate("learning_quiz")
                                 }
                             )
                         }

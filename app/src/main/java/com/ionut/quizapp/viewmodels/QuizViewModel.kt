@@ -13,6 +13,8 @@ import kotlinx.serialization.json.jsonPrimitive
 
 import io.github.jan.supabase.storage.storage
 import io.github.jan.supabase.functions.functions
+import io.github.jan.supabase.postgrest.from
+import io.ktor.client.plugins.timeout
 import io.ktor.client.request.header
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -99,6 +101,12 @@ class QuizViewModel(
         private set
     var generatedQuizId by mutableStateOf<String?>(null)
         private set
+    var isCustomQuizMode by mutableStateOf(false)
+    var showSaveCustomQuizDialog by mutableStateOf(false)
+    var customQuizTitleInput by mutableStateOf("")
+    var userCustomQuizzes = mutableStateListOf<CustomQuiz>()
+        private set
+    var isReplayingCustomQuiz by mutableStateOf(false)
     // =========================================================================================
     // 5. FUNCȚII DE BAZĂ (MANAGEMENT STARE)
     // =========================================================================================
@@ -123,6 +131,11 @@ class QuizViewModel(
 
         timerJob?.cancel()
         timerJob = null
+
+        isCustomQuizMode = false
+        isReplayingCustomQuiz = false
+        showSaveCustomQuizDialog = false
+        customQuizTitleInput = ""
     }
 
     override fun onCleared() {
@@ -177,37 +190,32 @@ class QuizViewModel(
     // =========================================================================================
     // LOGICĂ: CUSTOM AI QUIZ
     // =========================================================================================
-    fun loadCustomQuiz(quizId: String) {
+    fun startCustomQuizMode(quizId: String, isReplay: Boolean = false) {
         resetQuizState()
         isLoading = true
-
-        // Setăm regulile de bază (fără timer, ca un Classic Mode)
-        currentGameLogic = GameModeLogic.Classic(100) // Permitem până la 100 de întrebări
-        isTimedMode = false
-        isSuddenDeathMode = false
-        isUtmMode = false
-        isLearningMode = false
+        isLearningMode = true
+        isCustomQuizMode = true
+        isReplayingCustomQuiz = isReplay
+        errorMessage = null
 
         viewModelScope.launch {
             try {
-                // Apelează funcția pe care tocmai am făcut-o perfectă în Repository
+                // Tragem întrebările generate din baza de date
                 val customQuestions = repository.fetchCustomQuestions(quizId)
 
                 if (customQuestions.isNotEmpty()) {
                     questions.clear()
                     questions.addAll(customQuestions)
-                    totalQuestionsCount = customQuestions.size
-                    prepareCurrentOptions()
 
-                    isGameOver = false
+                    // Ne punem pe prima întrebare
+                    currentLearningIndex = 0
+                    prepareOptionsForLearning()
                 } else {
                     errorMessage = "Could not load the generated questions."
-                    isGameOver = true
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
                 errorMessage = "Error loading the quiz: ${e.message}"
-                isGameOver = true
             } finally {
                 isLoading = false
             }
@@ -256,10 +264,45 @@ class QuizViewModel(
         }
     }
 
+    fun loadUserCustomQuizzes(userId: String) {
+        viewModelScope.launch {
+            try {
+                val quizzes = repository.fetchUserCustomQuizzes(userId)
+                userCustomQuizzes.clear()
+                userCustomQuizzes.addAll(quizzes)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun deleteCustomQuizFromLibrary(quizId: String) {
+        viewModelScope.launch {
+            try {
+                // Așteptăm să vedem dacă backend-ul a reușit să-l șteargă
+                val success = repository.deleteCustomQuiz(quizId)
+
+                if (success) {
+                    // Doar dacă a reușit pe server, îl ștergem și de pe ecran
+                    userCustomQuizzes.removeAll { it.id == quizId }
+                } else {
+                    // Opțional: Poți seta un errorMessage aici ca să arăți un Toast/Snackbar utilizatorului
+                    errorMessage = "Could not delete the quiz. Please check your connection."
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                errorMessage = "An error occurred during deletion."
+            }
+        }
+    }
+
     // =========================================================================================
     // 7. LOGICĂ: MOD LEARNING
     // =========================================================================================
     fun loadLearningQuestions(categoryUI: String, difficulty: String, isUtm: Boolean) {
+        // 1. PREVENIM DUBLU-CLICK: Dacă deja se încarcă, ignorăm orice altă apăsare de buton
+        if (isLoading) return
+
         resetQuizState()
         isLoading = true
         isLearningMode = true
@@ -272,6 +315,8 @@ class QuizViewModel(
                 val response = repository.fetchQuestionsOrdered(categoryUI, difficulty, isUtm)
 
                 if (response.isNotEmpty()) {
+                    // 2. SIGURANȚĂ EXTRA: Curățăm lista fix înainte să adăugăm datele noi
+                    questions.clear()
                     questions.addAll(response)
 
                     val allProgress = if (user != null) repository.getAllUserProgress(user.id, isUtm) else emptyList()
@@ -334,50 +379,29 @@ class QuizViewModel(
         aiExplanation = null
 
         viewModelScope.launch {
-            val explanation = aiRepository.getExplanation(
-                questionId = currentQuestion.id,
-                isUtm = isUtmMode
-            )
-            aiExplanation = explanation
-            isAiLoading = false
-        }
-    }
-
-    fun uploadPdfForCustomQuiz(uri: android.net.Uri, context: android.content.Context) {
-        viewModelScope.launch {
-            isUploadingPdf = true
-            pdfUploadMessage = "Uploading PDF to Cloud..."
-
             try {
-                val bytes = uri.toByteArray(context)
-                    ?: throw Exception("Could not read the file.")
-
-                val fileName = "quiz_doc_${System.currentTimeMillis()}.pdf"
-                val publicUrl = repository.uploadPdfForAi(fileName, bytes)
-
-                pdfUploadMessage = "Success! File uploaded."
-                println("PDF Uploaded. Public URL: $publicUrl")
-
-                // PASUL URMĂTOR: Apel Edge Function
-
+                // Dacă e Custom Quiz, luăm din tabelul custom_questions. Altfel, apelăm Gemini normal.
+                val explanation = if (isCustomQuizMode) {
+                    repository.getCustomQuestionExplanation(currentQuestion.question_text)
+                } else {
+                    aiRepository.getExplanation(
+                        questionId = currentQuestion.id,
+                        isUtm = isUtmMode
+                    )
+                }
+                aiExplanation = explanation
             } catch (e: Exception) {
-                pdfUploadMessage = "Upload error: ${e.message}"
                 e.printStackTrace()
+                aiExplanation = "An error occurred while getting the explanation."
             } finally {
-                isUploadingPdf = false
+                isAiLoading = false
             }
         }
-    }
-
-    fun resetPdfUploadState() {
-        isUploadingPdf = false
-        pdfUploadMessage = null
     }
 
     fun resetGenerateQuizState() {
         generateQuizError = null
         generateQuizSuccess = false
-        generatedQuizId = null
     }
 
     // --- FUNCȚIA DE GENERARE ---
@@ -398,8 +422,7 @@ class QuizViewModel(
                 val uniqueFileName = "${java.util.UUID.randomUUID()}_${originalFileName}"
                 val filePath = "$userId/$uniqueFileName"
 
-                // 2. Urcăm fișierul în bucket-ul Supabase (AI-ul îl va șterge automat după)
-                // UITE AICI: FĂRĂ io.github.jan.supabase în față, doar SupabaseClient-ul tău!
+                // 2. Urcăm fișierul în bucket-ul Supabase
                 SupabaseClient.client.storage
                     .from("pdf_uploads")
                     .upload(filePath, fileBytes)
@@ -414,6 +437,10 @@ class QuizViewModel(
                 val response = SupabaseClient.client.functions.invoke("generate-custom-quiz") {
                     setBody(jsonBodyString)
                     header("Content-Type", "application/json")
+                    // Mărim timpul de așteptare la 100 de secunde (AI-ul are nevoie de timp pt PDF-uri)
+                    timeout {
+                        requestTimeoutMillis = 100_000
+                    }
                 }
 
                 // 4. Parsăm răspunsul serverului
@@ -427,16 +454,60 @@ class QuizViewModel(
                     generateQuizSuccess = true
                     generatedQuizId = responseData["quizId"]?.jsonPrimitive?.content
                 } else {
-                    // Eroare de la AI (Troll, invalid etc.)
-                    generateQuizError = responseData["error"]?.jsonPrimitive?.content ?: "Unknown error occurred during generation."
+                    // Eroare de la AI
+                    generateQuizError = responseData["error"]?.jsonPrimitive?.content ?: "The AI couldn't generate a quiz from this document."
                 }
 
             } catch (e: Exception) {
                 e.printStackTrace()
-                generateQuizError = "Connection error: ${e.message}"
+
+                // --- TRADUCEM ERORILE TEHNICE ÎN MESAJE PRIETENOASE ---
+                val errorString = e.message ?: ""
+                generateQuizError = when {
+                    errorString.contains("timeout", ignoreCase = true) ->
+                        "The AI is taking too long to read this document. Please try a smaller PDF or try again later."
+                    errorString.contains("503") || errorString.contains("busy", ignoreCase = true) ->
+                        "The AI model is currently busy. Please try again in a few minutes."
+                    errorString.contains("JSON", ignoreCase = true) || errorString.contains("Expected", ignoreCase = true) ->
+                        "The AI couldn't properly format the questions from this document. Please try a different PDF."
+                    else ->
+                        "Oops! Something went wrong while analyzing the document. Please try another one."
+                }
             } finally {
                 isGeneratingQuiz = false
             }
+        }
+    }
+
+    fun saveCustomQuizAndExit(onComplete: () -> Unit) {
+        val quizId = generatedQuizId
+        if (quizId != null && customQuizTitleInput.isNotBlank()) {
+            viewModelScope.launch {
+                repository.updateCustomQuizTitle(quizId, customQuizTitleInput)
+                generatedQuizId = null
+                resetQuizState()
+                onComplete()
+            }
+        } else {
+            generatedQuizId = null
+            resetQuizState()
+            onComplete()
+        }
+    }
+
+    fun discardCustomQuizAndExit(onComplete: () -> Unit) {
+        val quizId = generatedQuizId
+        if (quizId != null) {
+            viewModelScope.launch {
+                repository.deleteCustomQuiz(quizId) // Șterge din baza de date
+                generatedQuizId = null
+                resetQuizState()
+                onComplete()
+            }
+        } else {
+            generatedQuizId = null
+            resetQuizState()
+            onComplete()
         }
     }
 

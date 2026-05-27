@@ -2,6 +2,7 @@ package com.ionut.quizapp.auth
 
 import android.util.Log
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
@@ -19,7 +20,6 @@ class AuthViewModel : ViewModel() {
 
     init {
         viewModelScope.launch {
-            // Varianta alternativă dacă authState nu este recunoscut:
             SupabaseClient.client.auth.sessionStatus.collect { event ->
                 fetchProfile()
             }
@@ -29,14 +29,29 @@ class AuthViewModel : ViewModel() {
 
     val currentUserId: String?
         get() = SupabaseClient.client.auth.currentUserOrNull()?.id
+
+    // ==========================================
+    // STATE-URI PENTRU UI
+    // ==========================================
+    var currentUserProfile by mutableStateOf<String?>(null)
+        private set
+
+    var isCurrentUserGuest by mutableStateOf(false)
+        private set
+
+    // STATE NOU: Avatarul curent
+    var currentUserAvatarId by mutableIntStateOf(1)
+        private set
+
+    // ==========================================
+    // FUNCȚII DE AUTENTIFICARE
+    // ==========================================
     fun signUp(userEmail: String, userPass: String, username: String, onResult: (Boolean) -> Unit) {
         viewModelScope.launch {
             try {
-                // Trimitem username-ul în raw_user_meta_data pentru ca Trigger-ul să-l poată citi
                 SupabaseClient.client.auth.signUpWith(Email) {
                     email = userEmail
                     password = userPass
-                    // Această linie trimite datele către Trigger-ul SQL
                     data = buildJsonObject {
                         put("username", username)
                     }
@@ -49,7 +64,6 @@ class AuthViewModel : ViewModel() {
         }
     }
 
-    // Funcție pentru logarea unui utilizator existent
     fun loginAsUser(userEmail: String, userPass: String, onResult: (Boolean) -> Unit) {
         viewModelScope.launch {
             try {
@@ -70,8 +84,6 @@ class AuthViewModel : ViewModel() {
             try {
                 val currentUser = SupabaseClient.client.auth.currentUserOrNull()
 
-                // Dacă există un user și NU este anonim, îi dăm Sign Out
-                // DOAR pentru a face loc sesiunii de Guest
                 if (currentUser != null && currentUser.identities?.isEmpty() == false) {
                     SupabaseClient.client.auth.signOut()
                 }
@@ -90,6 +102,7 @@ class AuthViewModel : ViewModel() {
             try {
                 SupabaseClient.client.auth.signOut()
                 currentUserProfile = null
+                currentUserAvatarId = 1 // Resetăm la avatarul default
                 onResult()
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -97,12 +110,9 @@ class AuthViewModel : ViewModel() {
         }
     }
 
-    // Add this inside AuthViewModel class
-    var currentUserProfile by mutableStateOf<String?>(null)
-        private set
-    var isCurrentUserGuest by mutableStateOf(false)
-        private set
-
+    // ==========================================
+    // FUNCȚII PENTRU PROFIL
+    // ==========================================
     fun fetchProfile() {
         viewModelScope.launch {
             try {
@@ -110,7 +120,6 @@ class AuthViewModel : ViewModel() {
                 val userId = user?.id
 
                 if (userId != null) {
-                    // Fetch the username from the profiles table
                     val profile = SupabaseClient.client.from("profiles")
                         .select {
                             filter { eq("id", userId) }
@@ -119,11 +128,38 @@ class AuthViewModel : ViewModel() {
                     currentUserProfile = profile.username
                     isCurrentUserGuest = profile.is_guest
 
+                    // NOU: Citim avatarul din baza de date
+                    currentUserAvatarId = profile.avatar_id
                 }
             } catch (e: Exception) {
                 Log.e("PROFILE_ERROR", "Eroare la fetch: ${e.message}")
                 currentUserProfile = "Error loading"
                 isCurrentUserGuest = false
+                currentUserAvatarId = 1
+            }
+        }
+    }
+
+    // NOU: Funcția de salvare a avatarului
+    fun updateAvatar(newAvatarId: Int) {
+        val userId = currentUserId ?: return
+
+        viewModelScope.launch {
+            try {
+                // 1. Modificăm în baza de date (tabelul 'profiles')
+                SupabaseClient.client.from("profiles").update(
+                    {
+                        set("avatar_id", newAvatarId)
+                    }
+                ) {
+                    filter { eq("id", userId) }
+                }
+
+                // 2. Actualizăm interfața instantaneu
+                currentUserAvatarId = newAvatarId
+
+            } catch (e: Exception) {
+                Log.e("AUTH", "Eroare la update avatar: ${e.message}")
             }
         }
     }

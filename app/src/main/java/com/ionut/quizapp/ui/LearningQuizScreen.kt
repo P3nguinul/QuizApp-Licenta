@@ -151,12 +151,89 @@ fun LearningQuizScreen(
         }
     }
 
+    // --- DIALOG PENTRU SALVAREA TESTELOR GENERATE DE AI ---
+    if (quizViewModel.showSaveCustomQuizDialog) {
+        Dialog(onDismissRequest = { quizViewModel.showSaveCustomQuizDialog = false }) {
+            Surface(
+                shape = RoundedCornerShape(32.dp),
+                color = colors.surface,
+                tonalElevation = 8.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 24.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(28.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = colors.primary,
+                        modifier = Modifier.size(48.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text(
+                        text = "Save this Quiz?",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Black,
+                        color = colors.textMain
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "Do you want to save this generated quiz to your library? Give it a name to easily find it later.",
+                        fontSize = 14.sp,
+                        color = colors.textSecondary,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    OutlinedTextField(
+                        value = quizViewModel.customQuizTitleInput,
+                        onValueChange = { quizViewModel.customQuizTitleInput = it },
+                        label = { Text("Quiz Title") },
+                        placeholder = { Text("e.g., Biology Chapter 1") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(32.dp))
+
+                    Button(
+                        onClick = { quizViewModel.saveCustomQuizAndExit(onExit) },
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                        enabled = quizViewModel.customQuizTitleInput.isNotBlank()
+                    ) {
+                        Text("SAVE TO LIBRARY", fontWeight = FontWeight.ExtraBold)
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    TextButton(
+                        onClick = { quizViewModel.discardCustomQuizAndExit(onExit) },
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) {
+                        Text("DELETE & EXIT", color = Color(0xFFE53935), fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
                 title = {
                     Text(
-                        text = "STUDY MODULE",
+                        text = if (quizViewModel.isCustomQuizMode) "CUSTOM AI QUIZ" else "STUDY MODULE",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Black,
                         letterSpacing = 1.5.sp,
@@ -164,7 +241,19 @@ fun LearningQuizScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = { showExitDialog = true }) {
+                    IconButton(onClick = {
+                        if (quizViewModel.isCustomQuizMode && !quizViewModel.isReplayingCustomQuiz) {
+                            // Test nou -> Vrem să îl salvăm
+                            quizViewModel.showSaveCustomQuizDialog = true
+                    } else if (quizViewModel.isCustomQuizMode && quizViewModel.isReplayingCustomQuiz) {
+                            // Test din librărie -> Ieșim direct
+                            quizViewModel.resetQuizState()
+                            onExit()
+                        } else {
+                            // Test normal UTM/Categorii -> Modal normal
+                            showExitDialog = true
+                        }
+                    }) {
                         Icon(Icons.Default.Close, contentDescription = "Exit Study", tint = colors.textMain)
                     }
                 },
@@ -229,18 +318,41 @@ fun LearningQuizScreen(
                         Text("AI EXPLAIN", fontWeight = FontWeight.Black, letterSpacing = 0.5.sp)
                     }
 
-                    // Săgeată Înainte
-                    FilledIconButton(
-                        onClick = {quizViewModel.navigateLearning(1) },
-                        enabled = quizViewModel.currentLearningIndex < quizViewModel.questions.size - 1,
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = colors.primary.copy(alpha = 0.1f),
-                            contentColor = colors.primary,
-                            disabledContainerColor = colors.textSecondary.copy(alpha = 0.05f)
-                        ),
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Next")
+                    // --- Săgeată Înainte SAU Buton FINISH ---
+                    val isLastQuestion = quizViewModel.currentLearningIndex == quizViewModel.questions.size - 1
+
+                    if (isLastQuestion) {
+                        // Suntem la final, afișăm butonul FINISH
+                        Button(
+                            onClick = {
+                                if (quizViewModel.isCustomQuizMode && !quizViewModel.isReplayingCustomQuiz) {
+                                    quizViewModel.showSaveCustomQuizDialog = true
+                                } else if (quizViewModel.isCustomQuizMode && quizViewModel.isReplayingCustomQuiz) {
+                                    quizViewModel.resetQuizState()
+                                    onExit()
+                                } else {
+                                    quizViewModel.saveProgressAndExit(isGuest, onExit)
+                                }
+                            },
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                            modifier = Modifier.height(48.dp)
+                        ) {
+                            Text("FINISH", fontWeight = FontWeight.Black)
+                        }
+                    } else {
+                        // Nu suntem la final, afișăm Săgeata Înainte normală
+                        FilledIconButton(
+                            onClick = { quizViewModel.navigateLearning(1) },
+                            enabled = true,
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = colors.primary.copy(alpha = 0.1f),
+                                contentColor = colors.primary
+                            ),
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Next")
+                        }
                     }
                 }
             }
@@ -290,17 +402,19 @@ fun LearningQuizScreen(
                                 color = colors.textSecondary,
                                 fontWeight = FontWeight.Black
                             )
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = colors.primary.copy(alpha = 0.1f)
-                            ) {
-                                Text(
-                                    text = targetQuestion.difficulty.uppercase(),
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = colors.primary,
-                                    fontWeight = FontWeight.Bold
-                                )
+                            if (!quizViewModel.isCustomQuizMode) {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = colors.primary.copy(alpha = 0.1f)
+                                ) {
+                                    Text(
+                                        text = targetQuestion.difficulty.uppercase(),
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = colors.primary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                         }
 

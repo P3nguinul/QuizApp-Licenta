@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -141,9 +142,8 @@ fun MainScreen(
                 }
 
                 // --- 2. BUTON AI CUSTOM QUIZ (Afară din grilă) ---
-                Button(
+                Card(
                     onClick = {
-                        // Înlocuiește quizViewModel.isUserGuest cu authViewModel.isCurrentUserGuest
                         if (authViewModel.isCurrentUserGuest) {
                             showGuestPremiumDialog = true
                         } else {
@@ -152,26 +152,61 @@ fun MainScreen(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(64.dp)
-                        .padding(bottom = 12.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF6200EE)
+                        .height(80.dp), // Un pic mai înalt pentru a respira
+                    shape = RoundedCornerShape(24.dp), // Aceeași curbură ca la modurile de joc
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFFF9F0FF) // Un mov pastelat, foarte delicat
                     ),
-                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
+                    border = BorderStroke(1.dp, Color(0xFFE0C3FF).copy(alpha = 0.6f)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp) // Am eliminat umbra grea
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.AutoAwesome,
-                        contentDescription = "AI",
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Text(
-                        text = "GENERATE QUIZ FROM PDF",
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 1.sp,
-                        fontSize = 16.sp
-                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 20.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Iconiță AI elegantă în stânga, cu fundal circular
+                        Surface(
+                            shape = CircleShape,
+                            color = Color(0xFF8B5CF6).copy(alpha = 0.15f),
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.AutoAwesome,
+                                    contentDescription = "AI Magic",
+                                    tint = Color(0xFF8B5CF6),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(16.dp))
+
+                        // Textele stivuite pentru un aspect mai profesional
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "AI Quiz Generator",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color(0xFF6D28D9)
+                            )
+                            Text(
+                                text = "Transform PDFs into questions",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color(0xFF6D28D9).copy(alpha = 0.7f)
+                            )
+                        }
+
+                        // Săgeată indicatoare discretă
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = Color(0xFF6D28D9).copy(alpha = 0.4f),
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))

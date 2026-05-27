@@ -6,5 +6,6 @@ import kotlinx.serialization.Serializable
 data class UserProfile(
     val id: String,
     val username: String,
-    val is_guest: Boolean = false
+    val is_guest: Boolean = false,
+    val avatar_id: Int = 1
 )

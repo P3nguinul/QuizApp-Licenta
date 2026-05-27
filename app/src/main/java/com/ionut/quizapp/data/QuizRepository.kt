@@ -2,6 +2,7 @@ package com.ionut.quizapp.data
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.rpc
@@ -159,15 +160,24 @@ class QuizRepository {
     }
 
     suspend fun getGlobalLeaderboard(mode: String, isUtm: Boolean): List<LeaderboardEntry> {
-        return SupabaseClient.client.from("leaderboard")
-            .select {
-                filter {
-                    eq("game_mode", mode)
-                    eq("is_utm", isUtm)
-                }
-                order("score", order = io.github.jan.supabase.postgrest.query.Order.DESCENDING)
-                limit(15)
-            }.decodeList<LeaderboardEntry>()
+        return try {
+            SupabaseClient.client.from("leaderboard")
+                .select(
+                    columns = io.github.jan.supabase.postgrest.query.Columns.raw("*, profiles(avatar_id)")
+                ) {
+                    filter {
+                        eq("game_mode", mode)
+                        eq("is_utm", isUtm)
+                    }
+                    order("score", order = io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+                    limit(15)
+                }.decodeList<LeaderboardEntry>()
+        } catch (e: Exception) {
+            // AICI PRINDEM EROAREA FĂRĂ SĂ DĂM CRASH
+            Log.e("SUPABASE_ERROR", "Eroare la Leaderboard JOIN: ${e.message}")
+            e.printStackTrace()
+            emptyList()
+        }
     }
 
     suspend fun getPersonalBest(userId: String, mode: String, isUtm: Boolean): Int {
@@ -239,6 +249,69 @@ class QuizRepository {
             } catch (e: Exception) {
                 // Erorile de ștergere sunt ignorate silențios
             }
+        }
+    }
+
+    suspend fun getCustomQuestionExplanation(questionText: String): String {
+        return try {
+            val response = SupabaseClient.client.from("custom_questions")
+                .select {
+                    filter {
+                        eq("question_text", questionText)
+                    }
+                }.decodeList<JsonObject>().firstOrNull()
+
+            // AICI ESTE MODIFICAREA: Folosim "ai_explanation"
+            response?.get("ai_explanation")?.jsonPrimitive?.content
+                ?: "The AI didn't provide a specific explanation for this question."
+        } catch (e: Exception) {
+            e.printStackTrace()
+            "Connection error while fetching explanation."
+        }
+    }
+
+    suspend fun updateCustomQuizTitle(quizId: String, newTitle: String) {
+        try {
+            SupabaseClient.client.from("custom_quizzes").update(
+                {
+                    set("title", newTitle) // Presupunând că ai o coloană "title"
+                }
+            ) {
+                filter {
+                    eq("id", quizId)
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    suspend fun deleteCustomQuiz(quizId: String): Boolean {
+        return try {
+            SupabaseClient.client.from("custom_quizzes").delete {
+                filter {
+                    eq("id", quizId)
+                }
+            }
+            true // Am reușit!
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false // Am dat de bucluc
+        }
+    }
+
+    suspend fun fetchUserCustomQuizzes(userId: String): List<CustomQuiz> {
+        return try {
+            SupabaseClient.client.from("custom_quizzes")
+                .select {
+                    filter {
+                        eq("user_id", userId)
+                    }
+                    order("created_at", order = io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+                }.decodeList<CustomQuiz>()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
         }
     }
 }

@@ -57,17 +57,18 @@ class LearningViewModel(
                     val diffMap = mutableMapOf<String, ProgressData>()
 
                     difficulties.forEach { diff ->
-                        val countInfo = allCounts.find {
+                        // 1. ADUNĂM TOATE RÂNDURILE CARE SE POTRIVESC (Rezolvă problema înjumătățirii)
+                        val total = allCounts.filter {
                             (it.categoryName.trim().equals(dbCat.trim(), ignoreCase = true) ||
                                     it.categoryName.trim().equals(uiCat.trim(), ignoreCase = true)) &&
-                                    it.difficulty.trim().lowercase() == diff.trim().lowercase()
-                        }
-                        val total = countInfo?.count ?: 0
+                                    it.difficulty.trim().equals(diff.trim(), ignoreCase = true) // Folosim equals cu ignoreCase
+                        }.sumOf { it.count } // Adună contorul tuturor rândurilor găsite
 
+                        // 2. Căutăm progresul (aici find e ok pentru că avem o singură salvare per user)
                         val progressInfo = allUserProgress.find {
                             (it.categoryName.trim().equals(dbCat.trim(), ignoreCase = true) ||
                                     it.categoryName.trim().equals(uiCat.trim(), ignoreCase = true)) &&
-                                    it.difficulty.trim().lowercase() == diff.trim().lowercase()
+                                    it.difficulty.trim().equals(diff.trim(), ignoreCase = true)
                         }
                         val current = progressInfo?.lastQuestionIndex ?: 0
 

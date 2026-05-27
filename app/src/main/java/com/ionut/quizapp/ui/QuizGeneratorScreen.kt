@@ -140,9 +140,9 @@ fun QuizGeneratorScreen(
                     onClick = {
                         // 1. Încărcăm testul în motorul de joc
                         viewModel.generatedQuizId?.let { quizId ->
-                            viewModel.loadCustomQuiz(quizId)
+                            viewModel.startCustomQuizMode(quizId)
                         }
-                        // 2. Declanșăm navigarea către ecranul de Quiz
+                        // 2. Navigăm mai departe
                         onNavigateToGame()
                     },
                     modifier = Modifier.fillMaxWidth(),
@@ -150,7 +150,7 @@ fun QuizGeneratorScreen(
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = colors.primary)
                 ) {
-                    Text("AWESOME", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+                    Text("START GENERATED QUIZ", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
                 }
             } else {
                 // Afișăm eroarea primită de la AI (Anti-Troll), dacă există

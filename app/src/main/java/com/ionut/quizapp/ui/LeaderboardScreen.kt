@@ -1,61 +1,43 @@
 package com.ionut.quizapp.ui
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ionut.quizapp.data.LeaderboardEntry
+import com.ionut.quizapp.data.UserAvatar
 import com.ionut.quizapp.ui.theme.QuizTheme
 import com.ionut.quizapp.viewmodels.MenuViewModel
 import com.ionut.quizapp.viewmodels.QuizViewModel
-// ... importurile tale + cele de mai sus ...
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LeaderboardScreen(
-    quizViewModel: QuizViewModel= viewModel(),
+    quizViewModel: QuizViewModel = viewModel(),
     menuViewModel: MenuViewModel = viewModel(),
-    onBack: () -> Unit) {
+    onBack: () -> Unit
+) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val modes = listOf("Timed", "Sudden Death")
     var leaderboardData by remember { mutableStateOf<List<LeaderboardEntry>>(emptyList()) }
@@ -69,80 +51,241 @@ fun LeaderboardScreen(
     }
 
     Scaffold(
-        containerColor = QuizTheme.colors.background.copy(alpha = 0.95f),
+        containerColor = QuizTheme.colors.background,
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("GLOBAL RANKINGS", fontWeight = FontWeight.Black, letterSpacing = 1.sp) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = QuizTheme.colors.textMain)
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = Color.White
+                    containerColor = Color.Transparent
                 )
             )
         }
     ) { padding ->
-        Column(modifier = Modifier.padding(padding)) {
-            TabRow(
-                selectedTabIndex = selectedTab,
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.primary
+        Column(modifier = Modifier.padding(padding).fillMaxSize()) {
+
+            // TABS Customizate (Stil Pill)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 8.dp)
+                    .background(Color.Gray.copy(alpha = 0.1f), RoundedCornerShape(24.dp))
+                    .padding(4.dp),
+                horizontalArrangement = Arrangement.Center
             ) {
                 modes.forEachIndexed { index, title ->
-                    Tab(
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index },
-                        text = { Text(title, fontWeight = FontWeight.Bold) }
-                    )
+                    val isSelected = selectedTab == index
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(if (isSelected) QuizTheme.colors.primary else Color.Transparent)
+                            .clickable { selectedTab = index }
+                            .padding(vertical = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = title,
+                            color = if (isSelected) Color.White else QuizTheme.colors.textSecondary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                    }
                 }
             }
 
             if (isLoading) {
-                // Poți pune un LinearProgressIndicator aici
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = QuizTheme.colors.primary)
+                }
             } else if (leaderboardData.isEmpty()) {
-                Text(
-                    "No scores yet for this mode.",
-                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.secondary
-                )
-            }
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("No scores yet for this mode.", color = QuizTheme.colors.textSecondary)
+                }
+            } else {
+                val top3 = leaderboardData.take(3)
+                val restOfPlayers = leaderboardData.drop(3)
 
-            LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                itemsIndexed(leaderboardData) { index, entry ->
-                    LeaderboardItem(index + 1, entry)
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 24.dp)
+                ) {
+                    // SECȚIUNEA 1: PODIUMUL (Doar dacă avem măcar 1 jucător)
+                    if (top3.isNotEmpty()) {
+                        item {
+                            PodiumSection(top3 = top3)
+                        }
+                    }
+
+                    // SECȚIUNEA 2: LISTA DE JOS (De la locul 4 încolo)
+                    item {
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+                    itemsIndexed(restOfPlayers) { index, entry ->
+                        LeaderboardListTile(
+                            rank = index + 4, // Începem de la 4
+                            entry = entry
+                        )
+                    }
                 }
             }
         }
     }
 }
 
+// ====================================================================
+// COMPONENTA 1: PODIUMUL (Designul ca în poză)
+// ====================================================================
 @Composable
-fun LeaderboardItem(rank: Int, entry: LeaderboardEntry) {
-    // Definim culorile pentru Top 3
-    val rankColor = when (rank) {
-        1 -> Color(0xFFFFD700) // Gold vibrant
-        2 -> Color(0xFFB4B4B4) // Silver
-        3 -> Color(0xFFCD7F32) // Bronze
-        else -> QuizTheme.colors.textSecondary.copy(alpha = 0.5f)
-    }
+fun PodiumSection(top3: List<LeaderboardEntry>) {
+    // Înălțimile cutiilor (Rank 1 e cel mai înalt, apoi Rank 2, Rank 3)
+    val rank1Height = 160.dp
+    val rank2Height = 120.dp
+    val rank3Height = 90.dp
 
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .height(280.dp), // Suficient spațiu pentru cutii + avatare
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.Bottom
+    ) {
+        // Locul 2 (Stânga)
+        if (top3.size >= 2) {
+            PodiumPillar(
+                rank = 2,
+                entry = top3[1],
+                color = Color(0xFFC0C0C0), // Argint
+                height = rank2Height
+            )
+        } else {
+            Spacer(modifier = Modifier.width(90.dp))
+        }
+
+        // Locul 1 (Centru)
+        if (top3.isNotEmpty()) {
+            PodiumPillar(
+                rank = 1,
+                entry = top3[0],
+                color = Color(0xFFFFD700), // Aur
+                height = rank1Height
+            )
+        }
+
+        // Locul 3 (Dreapta)
+        if (top3.size >= 3) {
+            PodiumPillar(
+                rank = 3,
+                entry = top3[2],
+                color = Color(0xFFCD7F32), // Bronz
+                height = rank3Height
+            )
+        } else {
+            Spacer(modifier = Modifier.width(90.dp))
+        }
+    }
+}
+
+@Composable
+fun PodiumPillar(rank: Int, entry: LeaderboardEntry, color: Color, height: androidx.compose.ui.unit.Dp) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Bottom,
+        modifier = Modifier.width(100.dp)
+    ) {
+        // 1. Avatarul Jucătorului
+        Box(
+            modifier = Modifier.size(76.dp) // Părintele e un pic mai mare, netăiat
+        ) {
+            // Poza avatarului cu contur alb
+            Image(
+                painter = painterResource(id = UserAvatar.fromId(entry.getAvatarId()).drawableRes),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(70.dp)
+                    .align(Alignment.TopCenter)
+                    .clip(CircleShape)
+                    .border(3.dp, Color.White, CircleShape) // Conturul alb pus elegant
+            )
+
+            // Cercul cu rank-ul (pus peste poză, nefiind tăiat de părinte)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .offset(x = (-4).dp, y = (-4).dp) // Îl tragem un pic mai pe centru
+                    .size(26.dp)
+                    .clip(CircleShape)
+                    .background(color)
+                    .border(2.dp, Color.White, CircleShape), // Îi punem și lui un mic contur alb!
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = rank.toString(),
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 2. Numele și Scorul
+        Text(
+            text = entry.username,
+            fontWeight = FontWeight.Bold,
+            color = QuizTheme.colors.textMain,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            fontSize = 14.sp
+        )
+        Text(
+            text = "${entry.score} pts",
+            color = color,
+            fontWeight = FontWeight.Black,
+            fontSize = 14.sp
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 3. Stâlpul (Cutia podiumului)
+        Box(
+            modifier = Modifier
+                .width(90.dp)
+                .height(height)
+                .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                .background(color.copy(alpha = 0.2f)) // Culoare pastelată pe bază de medalie
+                .padding(top = 16.dp),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            Text(
+                text = rank.toString(),
+                fontWeight = FontWeight.Black,
+                fontSize = 48.sp,
+                color = color.copy(alpha = 0.5f)
+            )
+        }
+    }
+}
+
+// ====================================================================
+// COMPONENTA 2: LISTA DE JOS (De la Rank 4 încolo)
+// ====================================================================
+@Composable
+fun LeaderboardListTile(rank: Int, entry: LeaderboardEntry) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp, horizontal = 4.dp),
+            .padding(horizontal = 24.dp, vertical = 6.dp),
         shape = RoundedCornerShape(20.dp),
-        // Folosim culori cu contrast mare
-        colors = CardDefaults.cardColors(
-            containerColor = Color.White // Fundal alb pentru contrast maxim
-        ),
-        // Adăugăm umbră și un border discret
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        border = BorderStroke(
-            width = if (rank <= 3) 2.dp else 0.dp,
-            color = rankColor.copy(alpha = 0.5f)
-        )
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
             modifier = Modifier
@@ -150,25 +293,28 @@ fun LeaderboardItem(rank: Int, entry: LeaderboardEntry) {
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Cercul cu Rank-ul
-            Surface(
-                shape = CircleShape,
-                color = rankColor.copy(alpha = 0.15f),
-                modifier = Modifier.size(40.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = rank.toString(),
-                        fontWeight = FontWeight.Black,
-                        color = if (rank <= 3) rankColor else QuizTheme.colors.textMain,
-                        fontSize = 18.sp
-                    )
-                }
-            }
+            // Rank Number
+            Text(
+                text = rank.toString(),
+                fontWeight = FontWeight.Bold,
+                color = QuizTheme.colors.textSecondary,
+                modifier = Modifier.width(24.dp)
+            )
+
+            // Avatar
+            Image(
+                painter = painterResource(id = UserAvatar.fromId(entry.getAvatarId()).drawableRes),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(Color.Gray.copy(alpha = 0.1f))
+            )
 
             Spacer(modifier = Modifier.width(16.dp))
 
-            // Numele Utilizatorului
+            // Nume
             Text(
                 text = entry.username,
                 style = MaterialTheme.typography.titleMedium,
@@ -177,20 +323,13 @@ fun LeaderboardItem(rank: Int, entry: LeaderboardEntry) {
                 modifier = Modifier.weight(1f)
             )
 
-            // Scorul (Capsula de scor)
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = QuizTheme.colors.primary.copy(alpha = 0.1f),
-                border = BorderStroke(1.dp, QuizTheme.colors.primary.copy(alpha = 0.2f))
-            ) {
-                Text(
-                    text = "${entry.score} pts",
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    fontWeight = FontWeight.Black,
-                    color = QuizTheme.colors.primary,
-                    fontSize = 14.sp
-                )
-            }
+            // Scor
+            Text(
+                text = "${entry.score} pts",
+                fontWeight = FontWeight.Black,
+                color = QuizTheme.colors.primary,
+                fontSize = 14.sp
+            )
         }
     }
 }
