@@ -1,5 +1,6 @@
 package com.ionut.quizapp.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -16,12 +17,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ionut.quizapp.ui.theme.QuizTheme
 import com.ionut.quizapp.viewmodels.QuizViewModel
+import com.ionut.quizapp.viewmodels.SoundManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -29,6 +33,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun QuizScreen(
     viewModel: QuizViewModel,
+    soundManager: SoundManager,
     mode: String,
     isUtm: Boolean,
     categories: String,
@@ -36,6 +41,8 @@ fun QuizScreen(
     onFinish: () -> Unit,
     onExit: () -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
+
     val colors = QuizTheme.colors
     val scope = rememberCoroutineScope()
 
@@ -43,6 +50,10 @@ fun QuizScreen(
 
     // Stare locală pentru a colora butonul selectat înainte de a trece la următoarea întrebare
     var selectedAnswerIndex by remember { mutableStateOf<Int?>(null) }
+
+    BackHandler {
+        showExitDialog = true // Afișăm modalul tău în loc să ieșim din ecran
+    }
 
     // Încărcăm întrebările la pornire
     LaunchedEffect(Unit) {
@@ -54,6 +65,18 @@ fun QuizScreen(
     LaunchedEffect(viewModel.isGameOver) {
         if (viewModel.isGameOver) {
             onFinish()
+        }
+    }
+
+    LaunchedEffect(viewModel.timeLeft) {
+        if (viewModel.isTimedMode && viewModel.timeLeft == 10 && !viewModel.isGameOver) {
+            soundManager.playTimerWarning()
+        }
+    }
+
+    LaunchedEffect(viewModel.isGameOver) {
+        if (viewModel.isGameOver) {
+            soundManager.stopTimerWarning() // Tăiem firul sunetului!
         }
     }
 
@@ -267,8 +290,20 @@ fun QuizScreen(
 
                             Surface(
                                 onClick = {
-                                    if (selectedAnswerIndex == null) {
+                                    if (selectedAnswerIndex == null) { // Dacă n-a apăsat deja pe ceva
                                         selectedAnswerIndex = index
+
+                                        // 1. Vibrație instantanee la apăsare
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+
+                                        // 2. Redăm sunetul instantaneu!
+                                        if (isCorrect) { // Folosim `isCorrect` care era deja definit mai sus de tine
+                                            soundManager.playCorrect()
+                                        } else {
+                                            soundManager.playWrong()
+                                        }
+
+                                        // 3. Așteptăm o secundă ca să vadă culoarea, apoi trimitem răspunsul
                                         scope.launch {
                                             delay(1000)
                                             viewModel.submitAnswer(option)

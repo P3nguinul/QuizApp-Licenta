@@ -1,5 +1,6 @@
 package com.ionut.quizapp.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -24,6 +25,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -33,14 +36,19 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ionut.quizapp.auth.AuthViewModel
 import com.ionut.quizapp.ui.theme.QuizTheme
 import com.ionut.quizapp.viewmodels.QuizViewModel
+import com.ionut.quizapp.viewmodels.SoundManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LearningQuizScreen(
     authViewModel: AuthViewModel = viewModel(),
     quizViewModel: QuizViewModel = viewModel(),
+    soundManager: SoundManager,
     onExit: () -> Unit
 ) {
+
+    val haptic = LocalHapticFeedback.current
+
     val colors = QuizTheme.colors
     val currentQuestion = quizViewModel.questions.getOrNull(quizViewModel.currentLearningIndex)
 
@@ -51,6 +59,20 @@ fun LearningQuizScreen(
 
     val isGuest by remember(authViewModel) {
         derivedStateOf { authViewModel.isCurrentUserGuest }
+    }
+
+    BackHandler {
+        if (quizViewModel.isCustomQuizMode && !quizViewModel.isReplayingCustomQuiz) {
+            // Test AI nou -> Vrem să îl salvăm
+            quizViewModel.showSaveCustomQuizDialog = true
+        } else if (quizViewModel.isCustomQuizMode && quizViewModel.isReplayingCustomQuiz) {
+            // Test AI din librărie -> Ieșim direct
+            quizViewModel.resetQuizState()
+            onExit()
+        } else {
+            // Test normal -> Afișăm modalul normal de ieșire
+            showExitDialog = true
+        }
     }
 
     LaunchedEffect(quizViewModel.aiExplanation) {
@@ -457,7 +479,22 @@ fun LearningQuizScreen(
                                     isSelected = isSelected,
                                     isCorrect = isCorrect,
                                     isLocked = quizViewModel.isLearningAnswerLocked,
-                                    onClick = { quizViewModel.submitLearningAnswer(option) }
+                                    onClick = {
+                                        if (!quizViewModel.isLearningAnswerLocked) {
+                                            // 1. Vibrație la apăsare
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+
+                                            // 2. Redăm sunetul în funcție de răspuns
+                                            if (option == currentQuestion.correct_answer) {
+                                                soundManager.playCorrect()
+                                            } else {
+                                                soundManager.playWrong()
+                                            }
+
+                                            // 3. Trimitem răspunsul
+                                            quizViewModel.submitLearningAnswer(option)
+                                        }
+                                    }
                                 )
                             }
 

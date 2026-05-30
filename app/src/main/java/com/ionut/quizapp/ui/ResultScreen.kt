@@ -1,5 +1,6 @@
 package com.ionut.quizapp.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -25,16 +26,26 @@ import androidx.compose.ui.unit.sp
 import com.ionut.quizapp.logic.GameModeLogic
 import com.ionut.quizapp.ui.theme.QuizTheme
 import com.ionut.quizapp.viewmodels.QuizViewModel
+import com.ionut.quizapp.viewmodels.SoundManager
 
 @Composable
 fun ResultScreen(
     viewModel: QuizViewModel,
+    soundManager: SoundManager,
     onNavigateBack: () -> Unit
 ) {
     val score = viewModel.score
     val total = if (viewModel.isTimedMode) viewModel.totalAnsweredQuestions else viewModel.totalQuestionsCount
     val colors = QuizTheme.colors
     var showAnswers by remember { mutableStateOf(false) }
+
+    BackHandler {
+        onNavigateBack() // Face exact ce face și butonul cel mare "BACK TO MENU"
+    }
+
+    LaunchedEffect(Unit) {
+        soundManager.playFinish()
+    }
 
     // Scaffold ne ajută să punem butonul fix la bază (bottomBar)
     Scaffold(
@@ -45,6 +56,7 @@ fun ResultScreen(
                 onClick = onNavigateBack,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .navigationBarsPadding()
                     .padding(24.dp) // Spațiu în jurul butonului
                     .height(56.dp),
                 shape = RoundedCornerShape(16.dp),

@@ -327,7 +327,14 @@ class QuizViewModel(
                                 it.difficulty.equals(difficulty, ignoreCase = true)
                     }
 
-                    currentLearningIndex = (savedProgress?.lastQuestionIndex ?: 0).coerceIn(0, response.size - 1)
+                    val savedIndex = savedProgress?.lastQuestionIndex ?: 0
+
+                    currentLearningIndex = if (savedIndex >= response.size) {
+                        0 // Dacă a terminat testul (ex: 30 >= 30), îl punem să revadă de la întrebarea 1 (index 0)
+                    } else {
+                        savedIndex.coerceIn(0, response.size - 1) // Altfel, îl lăsăm exact unde a rămas
+                    }
+
                     prepareOptionsForLearning()
                 } else {
                     errorMessage = "No questions found for this specific category and difficulty."
@@ -543,6 +550,13 @@ class QuizViewModel(
     fun saveProgressAndExit(isGuest: Boolean, onComplete: () -> Unit) {
         val user = currentUser
         if (isLearningMode && questions.isNotEmpty() && !isGuest && user != null) {
+
+            val actualProgress = if (isLearningAnswerLocked) {
+                currentLearningIndex + 1
+            } else {
+                currentLearningIndex
+            }
+
             viewModelScope.launch {
                 try {
                     val currentQuestion = questions[currentLearningIndex]
@@ -550,7 +564,7 @@ class QuizViewModel(
                         userId = user.id,
                         categoryName = currentQuestion.category,
                         difficulty = currentQuestion.difficulty,
-                        lastQuestionIndex = currentLearningIndex,
+                        lastQuestionIndex = actualProgress,
                         isUtm = isUtmMode
                     )
                     repository.saveLearningProgress(progress)

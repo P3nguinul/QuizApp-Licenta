@@ -5,6 +5,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -18,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -44,6 +46,8 @@ fun LeaderboardScreen(
     var isLoading by remember { mutableStateOf(true) }
     val isUtmActive = menuViewModel.isUtmMode
 
+    var offsetX by remember { mutableFloatStateOf(0f) }
+
     LaunchedEffect(selectedTab) {
         isLoading = true
         leaderboardData = quizViewModel.getLeaderboard(modes[selectedTab], isUtmActive)
@@ -66,7 +70,34 @@ fun LeaderboardScreen(
             )
         }
     ) { padding ->
-        Column(modifier = Modifier.padding(padding).fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            // Când utilizatorul ridică degetul, analizăm direcția
+                            val threshold = 150f // Distanța necesară (în pixeli) ca să considerăm că e un swipe ferm
+                            if (offsetX > threshold) {
+                                // Swipe de la Stânga la Dreapta (trage ecranul spre dreapta) -> Mergem la tab-ul 0
+                                selectedTab = 0
+                            } else if (offsetX < -threshold) {
+                                // Swipe de la Dreapta la Stânga (trage ecranul spre stânga) -> Mergem la tab-ul 1
+                                selectedTab = 1
+                            }
+                            // Resetăm calculul distanței pentru următoarea mișcare
+                            offsetX = 0f
+                        },
+                        onHorizontalDrag = { change, dragAmount ->
+                            // Consumăm gestul ca să nu interacționeze aiurea cu scroll-ul vertical
+                            change.consume()
+                            // Adunăm numărul de pixeli mutați la fiecare cadru
+                            offsetX += dragAmount
+                        }
+                    )
+                }
+        ){
 
             // TABS Customizate (Stil Pill)
             Row(

@@ -2,6 +2,7 @@ package com.ionut.quizapp.ui
 
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -35,6 +36,15 @@ fun QuizGeneratorScreen(
 ) {
     val colors = QuizTheme.colors
     val context = LocalContext.current
+
+    BackHandler {
+        // Presupunând că ai o variabilă care arată dacă testul e gata (adaptează numele dacă e diferit)
+        if (viewModel.generateQuizSuccess) {
+            viewModel.discardCustomQuizAndExit(onBack) // Îl ștergem și ieșim
+        } else {
+            onBack() // Dacă doar se juca cu setările și n-a generat nimic, ieșim normal
+        }
+    }
 
     // Curățăm stările de eroare/succes când utilizatorul părăsește ecranul
     DisposableEffect(Unit) {
@@ -77,7 +87,14 @@ fun QuizGeneratorScreen(
             CenterAlignedTopAppBar(
                 title = { Text("AI CUSTOM QUIZ", fontWeight = FontWeight.Black, letterSpacing = 1.sp) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = {
+                        if (viewModel.generateQuizSuccess) {
+                            // Ștergem testul din DB dacă utilizatorul apasă pe săgeata de pe ecran
+                            viewModel.discardCustomQuizAndExit(onBack)
+                        } else {
+                            onBack()
+                        }
+                    }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = colors.textMain)
                     }
                 },

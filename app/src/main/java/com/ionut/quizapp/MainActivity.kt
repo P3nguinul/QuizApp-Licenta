@@ -3,10 +3,21 @@ package com.ionut.quizapp
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -14,6 +25,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.ionut.quizapp.auth.AuthViewModel
+import com.ionut.quizapp.data.SupabaseClient
 import com.ionut.quizapp.ui.LeaderboardScreen
 import com.ionut.quizapp.ui.LearningQuizScreen
 import com.ionut.quizapp.ui.LearningScreen
@@ -29,18 +41,67 @@ import com.ionut.quizapp.ui.ResultScreen
 import com.ionut.quizapp.viewmodels.LearningViewModel
 import com.ionut.quizapp.viewmodels.MenuViewModel
 import com.ionut.quizapp.viewmodels.QuizViewModel
+import com.ionut.quizapp.viewmodels.SoundManager
+import io.github.jan.supabase.gotrue.auth
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        val soundManager = SoundManager(applicationContext)
+
         setContent {
             val menuViewModel: MenuViewModel = viewModel()
             val quizViewModel: QuizViewModel = viewModel()
             val authViewModel: AuthViewModel = viewModel()
             val isUtm = menuViewModel.isUtmMode
 
+            var isAuthLoaded by remember { mutableStateOf(false) }
+            var startDestination by remember { mutableStateOf("login") }
+
+            LaunchedEffect(Unit) {
+                // Așteptăm ca Supabase să termine de verificat memoria telefonului
+                SupabaseClient.client.auth.awaitInitialization()
+                val user = SupabaseClient.client.auth.currentUserOrNull()
+
+                // Decidem încotro o ia aplicația
+                if (user != null) {
+                    startDestination = "main_menu"
+                } else {
+                    startDestination = "login"
+                }
+                isAuthLoaded = true // Dăm drumul la aplicație!
+            }
+
+            // Cât timp Supabase citește, arătăm un ecran de încărcare gol (durează cam 0.1s)
+            if (!isAuthLoaded) {
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator() // Rotița de încărcare
+                    }
+                }
+                return@setContent // Oprește desenarea restului până e gata
+            }
+
             QuizAppTheme(isUtmMode = isUtm) {
                 val navController = rememberNavController()
+
+                // === MUZICA DE FUNDAL CONTINUĂ ===
+                val lifecycleOwner = LocalLifecycleOwner.current
+                DisposableEffect(lifecycleOwner) {
+                    val observer = LifecycleEventObserver { _, event ->
+                        if (event == Lifecycle.Event.ON_RESUME) {
+                            soundManager.playBGM() // Joacă muzica când aplicația e pe ecran
+                        } else if (event == Lifecycle.Event.ON_PAUSE) {
+                            soundManager.pauseBGM() // Pauză dacă ieși din aplicație
+                        }
+                    }
+                    lifecycleOwner.lifecycle.addObserver(observer)
+                    onDispose {
+                        lifecycleOwner.lifecycle.removeObserver(observer)
+                        soundManager.releaseAll() // Curățăm RAM-ul la finalizarea totală
+                    }
+                }
 
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -48,7 +109,7 @@ class MainActivity : ComponentActivity() {
                 ) {
                     NavHost(
                         navController = navController,
-                        startDestination = "login"
+                        startDestination = startDestination
                     ) {
                         composable("login") {
                             LoginScreen(
@@ -146,6 +207,7 @@ class MainActivity : ComponentActivity() {
                             LearningQuizScreen(
                                 quizViewModel = quizViewModel,
                                 authViewModel = authViewModel,
+                                soundManager = soundManager,
                                 onExit = { navController.popBackStack() }
                             )
                         }
@@ -177,6 +239,7 @@ class MainActivity : ComponentActivity() {
 
                             QuizScreen(
                                 viewModel = quizViewModel, // Pasăm ViewModel-ul partajat
+                                soundManager = soundManager,
                                 mode = mode,
                                 isUtm = isUtmFlag,
                                 categories = categories,
@@ -197,6 +260,7 @@ class MainActivity : ComponentActivity() {
                         composable("results") {
                             ResultScreen(
                                 viewModel = quizViewModel,
+                                soundManager = soundManager,
                                 onNavigateBack = {
                                     navController.navigate("main_menu") {
                                         popUpTo("main_menu") { inclusive = true }
