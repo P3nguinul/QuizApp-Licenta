@@ -12,6 +12,8 @@ import com.ionut.quizapp.data.UserProfile
 import io.github.jan.supabase.gotrue.auth
 import io.github.jan.supabase.gotrue.providers.builtin.Email
 import io.github.jan.supabase.postgrest.from
+import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.rpc
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -100,12 +102,19 @@ class AuthViewModel : ViewModel() {
     fun logout(onResult: () -> Unit) {
         viewModelScope.launch {
             try {
+                // 1. Încercăm să anunțăm serverul civilizat
                 SupabaseClient.client.auth.signOut()
-                currentUserProfile = null
-                currentUserAvatarId = 1 // Resetăm la avatarul default
-                onResult()
             } catch (e: Exception) {
-                e.printStackTrace()
+                // Dacă serverul dă eroare (ex: contul a fost șters deja), ignorăm eroarea!
+                Log.d("AUTH", "Eroare la delogare server, forțăm delogarea locală: ${e.message}")
+            } finally {
+                // Blocul 'finally' se execută ABSOLUT MEREU, indiferent dacă a fost eroare sau succes.
+                // 2. Curățăm memoria aplicației
+                currentUserProfile = null
+                currentUserAvatarId = 1
+
+                // 3. Executăm navigarea către ecranul de Login!
+                onResult()
             }
         }
     }
@@ -160,6 +169,82 @@ class AuthViewModel : ViewModel() {
 
             } catch (e: Exception) {
                 Log.e("AUTH", "Eroare la update avatar: ${e.message}")
+            }
+        }
+    }
+
+    // --- SETĂRI CONT ---
+
+    fun updateUsername(newUsername: String, onResult: (Boolean, String) -> Unit) {
+        val userId = currentUserId ?: return onResult(false, "User not logged in.")
+
+        viewModelScope.launch {
+            try {
+                // 1. Actualizăm în tabelul public 'profiles' (de unde citim la fetchProfile)
+                SupabaseClient.client.from("profiles").update(
+                    {
+                        set("username", newUsername)
+                    }
+                ) {
+                    filter { eq("id", userId) }
+                }
+
+                // 2. Actualizăm și în metadata din Auth pentru consistență
+                SupabaseClient.client.auth.updateUser {
+                    data = buildJsonObject {
+                        put("username", newUsername)
+                    }
+                }
+
+                // 3. Actualizăm variabila locală ca să se schimbe instant pe ecran
+                currentUserProfile = newUsername
+                onResult(true, "Username updated successfully!")
+            } catch (e: Exception) {
+                e.printStackTrace()
+                onResult(false, e.message ?: "Failed to update username.")
+            }
+        }
+    }
+
+    fun updatePassword(newPassword: String, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                // Supabase se ocupă automat de criptarea noii parole
+                SupabaseClient.client.auth.updateUser {
+                    password = newPassword
+                }
+                onResult(true, "Password updated successfully!")
+            } catch (e: Exception) {
+                e.printStackTrace()
+                onResult(false, e.message ?: "Failed to update password. It must be at least 6 characters.")
+            }
+        }
+    }
+
+    fun deleteAccount(onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                // 1. Apelăm funcția SQL pentru a șterge definitiv utilizatorul de pe server
+                SupabaseClient.client.postgrest.rpc("delete_user")
+
+                // 2. Încercăm să dăm signOut local. Învăluim într-un try-catch intern
+                // pentru că dacă serverul dă eroare (deoarece user-ul e deja șters), o ignorăm.
+                try {
+                    SupabaseClient.client.auth.signOut()
+                } catch (authError: Exception) {
+                    // Ignorăm eroarea de rețea, curățarea locală a sesiunii s-a făcut oricum
+                    Log.d("AUTH", "SignOut error ignored after account deletion: ${authError.message}")
+                }
+
+                // 3. Curățăm datele din aplicație
+                currentUserProfile = null
+                currentUserAvatarId = 1
+
+                // 4. Întoarcem succes = true ca ecranul să poată schimba pagina!
+                onResult(true, "Account permanently deleted.")
+            } catch (e: Exception) {
+                e.printStackTrace()
+                onResult(false, e.message ?: "Failed to delete account.")
             }
         }
     }

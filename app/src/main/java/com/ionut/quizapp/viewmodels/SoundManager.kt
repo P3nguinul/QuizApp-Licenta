@@ -1,6 +1,7 @@
 package com.ionut.quizapp.viewmodels // Asigură-te că pachetul este corect
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.media.SoundPool
@@ -20,8 +21,27 @@ class SoundManager(private val context: Context) {
     private var finishSoundId = 0
 
     // Setări pentru utilizator
-    var isSoundEnabled = true
-    var isMusicEnabled = true
+    // 1. Creăm sau deschidem fișierul local de setări
+    private val prefs: SharedPreferences = context.getSharedPreferences("quiz_settings", Context.MODE_PRIVATE)
+
+    // 2. Transformăm variabilele simple în variabile inteligente care scriu/citesc din fișier
+    var isMusicEnabled: Boolean
+        get() = prefs.getBoolean("music_enabled", true) // Citește din fișier (default: true)
+        set(value) {
+            prefs.edit().putBoolean("music_enabled", value).apply() // Salvează în fișier
+        }
+
+    var isSoundEnabled: Boolean
+        get() = prefs.getBoolean("sfx_enabled", true)
+        set(value) {
+            prefs.edit().putBoolean("sfx_enabled", value).apply()
+        }
+
+    var isVibrationEnabled: Boolean
+        get() = prefs.getBoolean("vibration_enabled", true)
+        set(value) {
+            prefs.edit().putBoolean("vibration_enabled", value).apply()
+        }
 
     init {
         // 1. Configurăm SoundPool pentru efectele scurte
@@ -66,7 +86,7 @@ class SoundManager(private val context: Context) {
     // ==========================================
 
     fun playTimerWarning() {
-        if (!isSoundEnabled) return
+        if (!isMusicEnabled) return
 
         if (timerMediaPlayer == null) {
             timerMediaPlayer = MediaPlayer.create(context, R.raw.timer_tick)

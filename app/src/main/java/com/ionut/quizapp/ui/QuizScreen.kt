@@ -64,6 +64,11 @@ fun QuizScreen(
 
     LaunchedEffect(viewModel.isGameOver) {
         if (viewModel.isGameOver) {
+            // Vibrație la final de test!
+            if (soundManager.isVibrationEnabled) {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            }
+            soundManager.stopTimerWarning()
             onFinish()
         }
     }
@@ -88,6 +93,9 @@ fun QuizScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
+                        if (soundManager.isVibrationEnabled) {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        }
                         showExitDialog = false
                         viewModel.resetQuizState() // Curățăm starea
                         onExit() // Navigăm înapoi la meniu
@@ -294,7 +302,9 @@ fun QuizScreen(
                                         selectedAnswerIndex = index
 
                                         // 1. Vibrație instantanee la apăsare
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        if (soundManager.isVibrationEnabled) {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        }
 
                                         // 2. Redăm sunetul instantaneu!
                                         if (isCorrect) { // Folosim `isCorrect` care era deja definit mai sus de tine

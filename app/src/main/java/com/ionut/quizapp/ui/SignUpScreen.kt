@@ -16,7 +16,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -30,11 +29,12 @@ fun SignUpScreen(
     onBackToLogin: () -> Unit,
     viewModel: AuthViewModel = viewModel()
 ) {
-    // Forțăm modul normal pentru Login/SignUp
     QuizAppTheme(isUtmMode = false) {
-        var email by remember { mutableStateOf("") }
         var username by remember { mutableStateOf("") }
+        var email by remember { mutableStateOf("") }
         var password by remember { mutableStateOf("") }
+        var confirmPassword by remember { mutableStateOf("") } // <--- NOU: Stare pentru a doua parolă
+
         var isLoading by remember { mutableStateOf(false) }
         var errorMessage by remember { mutableStateOf<String?>(null) }
 
@@ -46,12 +46,16 @@ fun SignUpScreen(
                 errorMessage = "Username must be at least 3 characters."
                 return false
             }
-            if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+            if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches()) {
                 errorMessage = "Please enter a valid email address."
                 return false
             }
             if (password.length < 6) {
                 errorMessage = "Password must be at least 6 characters."
+                return false
+            }
+            if (password != confirmPassword) { // <--- NOU: Validare potrivire parole
+                errorMessage = "Passwords do not match."
                 return false
             }
             return true
@@ -61,16 +65,20 @@ fun SignUpScreen(
             if (validateInputs()) {
                 isLoading = true
                 errorMessage = null
-                viewModel.signUp(email, password, username) { success ->
+                viewModel.signUp(email.trim(), password, username.trim()) { success ->
                     isLoading = false
-                    if (success) onSignUpSuccess() else errorMessage = "Registration failed! Email might be taken."
+                    if (success) {
+                        onSignUpSuccess()
+                    } else {
+                        errorMessage = "Registration failed! Email might be already taken."
+                    }
                 }
             }
         }
 
         Surface(
             modifier = Modifier.fillMaxSize(),
-            color = QuizTheme.colors.background // Fundalul setat în tema noastră
+            color = QuizTheme.colors.background
         ) {
             Column(
                 modifier = Modifier
@@ -83,12 +91,12 @@ fun SignUpScreen(
                     text = "Create Account",
                     style = MaterialTheme.typography.headlineLarge,
                     fontWeight = FontWeight.Black,
-                    color = QuizTheme.colors.primary // Rozul (PinkLight)
+                    color = QuizTheme.colors.primary
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Username Field
+                // 1. Username Field
                 OutlinedTextField(
                     value = username,
                     onValueChange = { username = it; errorMessage = null },
@@ -106,7 +114,7 @@ fun SignUpScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Email Field
+                // 2. Email Field
                 OutlinedTextField(
                     value = email,
                     onValueChange = { email = it; errorMessage = null },
@@ -124,7 +132,7 @@ fun SignUpScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Password Field
+                // 3. Password Field
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it; errorMessage = null },
@@ -137,13 +145,33 @@ fun SignUpScreen(
                         focusedLabelColor = QuizTheme.colors.primary,
                         cursorColor = QuizTheme.colors.primary
                     ),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next), // Schimbat în Next
+                    keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) }) // Coboară la confirmare
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // 4. Confirm Password Field (NOU)
+                OutlinedTextField(
+                    value = confirmPassword,
+                    onValueChange = { confirmPassword = it; errorMessage = null },
+                    label = { Text("Confirm Password") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = QuizTheme.colors.primary,
+                        focusedLabelColor = QuizTheme.colors.primary,
+                        cursorColor = QuizTheme.colors.primary
+                    ),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done), // Acesta e ultimul field
                     keyboardActions = KeyboardActions(onDone = {
                         focusManager.clearFocus()
                         performSignUp()
                     })
                 )
 
+                // Zonă text pentru afișarea erorilor
                 errorMessage?.let {
                     Text(
                         text = it,
@@ -165,7 +193,7 @@ fun SignUpScreen(
                             .height(56.dp),
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = QuizTheme.colors.primary // Roz
+                            containerColor = QuizTheme.colors.primary
                         )
                     ) {
                         Text("Sign Up", fontWeight = FontWeight.Bold, fontSize = 16.sp)

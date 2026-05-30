@@ -141,6 +141,11 @@ fun LearningQuizScreen(
                     Button(
                         onClick = {
                             showExitDialog = false
+
+                            if (soundManager.isVibrationEnabled) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            }
+
                             quizViewModel.saveProgressAndExit(isGuest, onExit)
                         },
                         modifier = Modifier
@@ -240,7 +245,11 @@ fun LearningQuizScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     TextButton(
-                        onClick = { quizViewModel.discardCustomQuizAndExit(onExit) },
+                        onClick = {
+                            if (soundManager.isVibrationEnabled) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            }
+                            quizViewModel.discardCustomQuizAndExit(onExit) },
                         modifier = Modifier.fillMaxWidth().height(48.dp)
                     ) {
                         Text("DELETE & EXIT", color = Color(0xFFE53935), fontWeight = FontWeight.Bold)
@@ -482,7 +491,9 @@ fun LearningQuizScreen(
                                     onClick = {
                                         if (!quizViewModel.isLearningAnswerLocked) {
                                             // 1. Vibrație la apăsare
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            if (soundManager.isVibrationEnabled) {
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            }
 
                                             // 2. Redăm sunetul în funcție de răspuns
                                             if (option == currentQuestion.correct_answer) {

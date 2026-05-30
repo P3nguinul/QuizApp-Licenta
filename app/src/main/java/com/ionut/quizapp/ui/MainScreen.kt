@@ -35,6 +35,7 @@ import com.ionut.quizapp.data.gameModes
 import com.ionut.quizapp.ui.theme.QuizTheme
 import com.ionut.quizapp.viewmodels.MenuViewModel
 import com.ionut.quizapp.viewmodels.QuizViewModel
+import com.ionut.quizapp.viewmodels.SoundManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,16 +43,20 @@ fun MainScreen(
     onNavigateToProfile: () -> Unit,
     onNavigateToLeaderboard: () -> Unit,
     onNavigateToCustomQuiz: () -> Unit,
+    onNavigateToSettings: () -> Unit,
     onNavigateToLogin: () -> Unit,
     onStartQuiz: (mode: String, categories: List<String>, isUtm: Boolean, count: Int) -> Unit, // Am adăugat count aici
     authViewModel: AuthViewModel = viewModel(),
     menuViewModel: MenuViewModel = viewModel(),
-    quizViewModel: QuizViewModel = viewModel()
+    quizViewModel: QuizViewModel = viewModel(),
+    soundManager: SoundManager
 ) {
     val isUtm = menuViewModel.isUtmMode
     var showDialog by remember { mutableStateOf(false) }
     var selectedMode by remember { mutableStateOf<GameMode?>(null) }
     var showGuestPremiumDialog by remember { mutableStateOf(false) }
+
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
 
     val playfulColors = listOf(
         QuizTheme.colors.primary,
@@ -98,8 +103,23 @@ fun MainScreen(
                     }
                 },
                 actions = {
+
+                    IconButton(onClick = onNavigateToSettings) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Settings",
+                            modifier = Modifier.size(26.dp), // Un pic mai mic decât profilul
+                            tint = QuizTheme.colors.primary // Folosim culoarea temei pentru coerență
+                        )
+                    }
+
                     IconButton(onClick = onNavigateToProfile) {
-                        Icon(Icons.Default.AccountCircle, null, modifier = Modifier.size(32.dp), tint = QuizTheme.colors.primary)
+                        Icon(
+                            imageVector = Icons.Default.AccountCircle,
+                            contentDescription = "Profile",
+                            modifier = Modifier.size(32.dp),
+                            tint = QuizTheme.colors.primary
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
@@ -212,7 +232,13 @@ fun MainScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 // --- 3. SWITCH-UL UTM ---
-                UTMModeSwitch(isUtm) { menuViewModel.toggleUtmMode(it) }
+                UTMModeSwitch(isUtm) { newValue ->
+                    // Vibrează când schimbi modul
+                    if (soundManager.isVibrationEnabled) {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                    }
+                    menuViewModel.toggleUtmMode(newValue)
+                }
             }
         }
     }

@@ -14,10 +14,13 @@ import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -25,30 +28,45 @@ import androidx.compose.ui.unit.sp
 import com.ionut.quizapp.data.SupabaseClient
 import com.ionut.quizapp.ui.theme.QuizTheme
 import com.ionut.quizapp.viewmodels.QuizViewModel
+import com.ionut.quizapp.viewmodels.SoundManager
 import io.github.jan.supabase.gotrue.auth
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QuizGeneratorScreen(
     viewModel: QuizViewModel,
+    soundManager: SoundManager,
     onBack: () -> Unit,
     onNavigateToGame: () -> Unit
 ) {
     val colors = QuizTheme.colors
     val context = LocalContext.current
 
+    val haptic = LocalHapticFeedback.current
+    val isVibrationEnabled = soundManager.isVibrationEnabled
+
     BackHandler {
         // Presupunând că ai o variabilă care arată dacă testul e gata (adaptează numele dacă e diferit)
         if (viewModel.generateQuizSuccess) {
-            viewModel.discardCustomQuizAndExit(onBack) // Îl ștergem și ieșim
+            // Vibrație pentru anularea/ștergerea testului
+            if (soundManager.isVibrationEnabled) {
+                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+            }
+            viewModel.discardCustomQuizAndExit(onBack)
         } else {
-            onBack() // Dacă doar se juca cu setările și n-a generat nimic, ieșim normal
+            onBack()
         }
     }
 
     // Curățăm stările de eroare/succes când utilizatorul părăsește ecranul
     DisposableEffect(Unit) {
         onDispose { viewModel.resetGenerateQuizState() }
+    }
+
+    LaunchedEffect(viewModel.generateQuizSuccess) {
+        if (viewModel.generateQuizSuccess && isVibrationEnabled) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        }
     }
 
     val pdfPickerLauncher = rememberLauncherForActivityResult(

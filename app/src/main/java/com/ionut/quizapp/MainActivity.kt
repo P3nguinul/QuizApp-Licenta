@@ -38,6 +38,7 @@ import com.ionut.quizapp.ui.ProfileScreen
 import com.ionut.quizapp.ui.QuizGeneratorScreen
 import com.ionut.quizapp.ui.QuizScreen
 import com.ionut.quizapp.ui.ResultScreen
+import com.ionut.quizapp.ui.SettingsScreen
 import com.ionut.quizapp.viewmodels.LearningViewModel
 import com.ionut.quizapp.viewmodels.MenuViewModel
 import com.ionut.quizapp.viewmodels.QuizViewModel
@@ -143,9 +144,11 @@ class MainActivity : ComponentActivity() {
                         composable("main_menu") {
                             MainScreen(
                                 menuViewModel = menuViewModel,
+                                soundManager = soundManager,
                                 onNavigateToProfile = { navController.navigate("profile") },
                                 onNavigateToLeaderboard = { navController.navigate("leaderboard") },
                                 onNavigateToCustomQuiz = { navController.navigate("quiz_generator") },
+                                onNavigateToSettings = { navController.navigate("settings") },
                                 onNavigateToLogin = { // Navigarea nouă
                                     navController.navigate("login") {
                                         popUpTo("main_menu") { inclusive = true }
@@ -177,6 +180,19 @@ class MainActivity : ComponentActivity() {
                                 onNavigateToGame = {
                                     // Trimitem utilizatorul direct în ecranul de studiu/learning!
                                     navController.navigate("learning_quiz")
+                                }
+                            )
+                        }
+
+                        composable("settings") {
+                            SettingsScreen(
+                                authViewModel = authViewModel,
+                                soundManager = soundManager,
+                                onBack = { navController.popBackStack() },
+                                onNavigateToLogin = { // <--- ADĂUGAT NOU
+                                    navController.navigate("login") {
+                                        popUpTo("main_menu") { inclusive = true }
+                                    }
                                 }
                             )
                         }
@@ -215,6 +231,7 @@ class MainActivity : ComponentActivity() {
                         composable("quiz_generator") {
                             QuizGeneratorScreen(
                                 viewModel = quizViewModel,
+                                soundManager = soundManager,
                                 onBack = { navController.popBackStack() },
                                 onNavigateToGame = {
                                     // Navigăm direct către ecranul de Learning!
