@@ -3,6 +3,10 @@ package com.ionut.quizapp.data
 import androidx.annotation.DrawableRes
 import com.ionut.quizapp.R
 
+// ==========================================
+// GESTIONARE AVATARE UTILIZATOR
+// ==========================================
+
 enum class UserAvatar(val id: Int, @DrawableRes val drawableRes: Int) {
     AVATAR_1(1, R.drawable.avatar_1),
     AVATAR_2(2, R.drawable.avatar_2),
@@ -22,7 +26,10 @@ enum class UserAvatar(val id: Int, @DrawableRes val drawableRes: Int) {
     AVATAR_16(16, R.drawable.avatar_16);
 
     companion object {
-        // Returnează avatarul pe baza ID-ului, fallback la primul dacă nu e găsit
+        /**
+         * Returnează obiectul UserAvatar corespunzător ID-ului furnizat.
+         * Dacă ID-ul nu există în listă, se returnează AVATAR_1 ca fallback.
+         */
         fun fromId(id: Int): UserAvatar {
             return entries.find { it.id == id } ?: AVATAR_1
         }

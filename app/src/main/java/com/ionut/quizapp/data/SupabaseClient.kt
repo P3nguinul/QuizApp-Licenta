@@ -15,7 +15,7 @@ object SupabaseClient {
         supabaseUrl = Config.SUPABASE_URL,
         supabaseKey = Config.SUPABASE_KEY
     ) {
-        install(Auth) // Am schimbat din GoTrue în Auth
+        install(Auth)
         install(Postgrest)
         install(Functions)
         install(Storage)

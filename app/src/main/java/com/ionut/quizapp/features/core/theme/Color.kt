@@ -1,4 +1,4 @@
-package com.ionut.quizapp.ui.theme
+package com.ionut.quizapp.features.core.theme
 
 import androidx.compose.ui.graphics.Color
 

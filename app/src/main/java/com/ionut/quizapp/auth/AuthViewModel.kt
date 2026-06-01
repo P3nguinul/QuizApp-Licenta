@@ -20,34 +20,42 @@ import kotlinx.serialization.json.put
 
 class AuthViewModel : ViewModel() {
 
-    init {
-        viewModelScope.launch {
-            SupabaseClient.client.auth.sessionStatus.collect { event ->
-                fetchProfile()
-            }
-        }
-        fetchProfile()
-    }
-
-    val currentUserId: String?
-        get() = SupabaseClient.client.auth.currentUserOrNull()?.id
-
     // ==========================================
     // STATE-URI PENTRU UI
     // ==========================================
+
     var currentUserProfile by mutableStateOf<String?>(null)
         private set
 
     var isCurrentUserGuest by mutableStateOf(false)
         private set
 
-    // STATE NOU: Avatarul curent
     var currentUserAvatarId by mutableIntStateOf(1)
         private set
 
+    val currentUserId: String?
+        get() = SupabaseClient.client.auth.currentUserOrNull()?.id
+
+
     // ==========================================
-    // FUNCȚII DE AUTENTIFICARE
+    // INITIALIZARE
     // ==========================================
+
+    init {
+        viewModelScope.launch {
+            // Monitorizăm starea sesiunii pentru a actualiza profilul automat la login/logout
+            SupabaseClient.client.auth.sessionStatus.collect { _ ->
+                fetchProfile()
+            }
+        }
+        fetchProfile()
+    }
+
+
+    // ==========================================
+    // LOGICA DE AUTENTIFICARE
+    // ==========================================
+
     fun signUp(userEmail: String, userPass: String, username: String, onResult: (Boolean) -> Unit) {
         viewModelScope.launch {
             try {
@@ -86,6 +94,7 @@ class AuthViewModel : ViewModel() {
             try {
                 val currentUser = SupabaseClient.client.auth.currentUserOrNull()
 
+                // Dacă există deja un user cu identitate, îi dăm logout înainte de guest login
                 if (currentUser != null && currentUser.identities?.isEmpty() == false) {
                     SupabaseClient.client.auth.signOut()
                 }
@@ -102,32 +111,27 @@ class AuthViewModel : ViewModel() {
     fun logout(onResult: () -> Unit) {
         viewModelScope.launch {
             try {
-                // 1. Încercăm să anunțăm serverul civilizat
                 SupabaseClient.client.auth.signOut()
             } catch (e: Exception) {
-                // Dacă serverul dă eroare (ex: contul a fost șters deja), ignorăm eroarea!
                 Log.d("AUTH", "Eroare la delogare server, forțăm delogarea locală: ${e.message}")
             } finally {
-                // Blocul 'finally' se execută ABSOLUT MEREU, indiferent dacă a fost eroare sau succes.
-                // 2. Curățăm memoria aplicației
+                // Resetăm starea locală indiferent de rezultatul apelului de rețea
                 currentUserProfile = null
                 currentUserAvatarId = 1
-
-                // 3. Executăm navigarea către ecranul de Login!
                 onResult()
             }
         }
     }
 
+
     // ==========================================
-    // FUNCȚII PENTRU PROFIL
+    // LOGICA DE PROFIL SI AVATAR
     // ==========================================
+
     fun fetchProfile() {
         viewModelScope.launch {
             try {
-                val user = SupabaseClient.client.auth.currentUserOrNull()
-                val userId = user?.id
-
+                val userId = currentUserId
                 if (userId != null) {
                     val profile = SupabaseClient.client.from("profiles")
                         .select {
@@ -136,8 +140,6 @@ class AuthViewModel : ViewModel() {
 
                     currentUserProfile = profile.username
                     isCurrentUserGuest = profile.is_guest
-
-                    // NOU: Citim avatarul din baza de date
                     currentUserAvatarId = profile.avatar_id
                 }
             } catch (e: Exception) {
@@ -149,54 +151,48 @@ class AuthViewModel : ViewModel() {
         }
     }
 
-    // NOU: Funcția de salvare a avatarului
     fun updateAvatar(newAvatarId: Int) {
         val userId = currentUserId ?: return
 
         viewModelScope.launch {
             try {
-                // 1. Modificăm în baza de date (tabelul 'profiles')
                 SupabaseClient.client.from("profiles").update(
-                    {
-                        set("avatar_id", newAvatarId)
-                    }
+                    { set("avatar_id", newAvatarId) }
                 ) {
                     filter { eq("id", userId) }
                 }
 
-                // 2. Actualizăm interfața instantaneu
                 currentUserAvatarId = newAvatarId
-
             } catch (e: Exception) {
                 Log.e("AUTH", "Eroare la update avatar: ${e.message}")
             }
         }
     }
 
-    // --- SETĂRI CONT ---
+
+    // ==========================================
+    // ADMINISTRARE CONT (SETARI)
+    // ==========================================
 
     fun updateUsername(newUsername: String, onResult: (Boolean, String) -> Unit) {
         val userId = currentUserId ?: return onResult(false, "User not logged in.")
 
         viewModelScope.launch {
             try {
-                // 1. Actualizăm în tabelul public 'profiles' (de unde citim la fetchProfile)
+                // Actualizăm în tabela publică 'profiles'
                 SupabaseClient.client.from("profiles").update(
-                    {
-                        set("username", newUsername)
-                    }
+                    { set("username", newUsername) }
                 ) {
                     filter { eq("id", userId) }
                 }
 
-                // 2. Actualizăm și în metadata din Auth pentru consistență
+                // Actualizăm metadata din Auth pentru consistență la nivel de sesiune
                 SupabaseClient.client.auth.updateUser {
                     data = buildJsonObject {
                         put("username", newUsername)
                     }
                 }
 
-                // 3. Actualizăm variabila locală ca să se schimbe instant pe ecran
                 currentUserProfile = newUsername
                 onResult(true, "Username updated successfully!")
             } catch (e: Exception) {
@@ -209,14 +205,13 @@ class AuthViewModel : ViewModel() {
     fun updatePassword(newPassword: String, onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
             try {
-                // Supabase se ocupă automat de criptarea noii parole
                 SupabaseClient.client.auth.updateUser {
                     password = newPassword
                 }
                 onResult(true, "Password updated successfully!")
             } catch (e: Exception) {
                 e.printStackTrace()
-                onResult(false, e.message ?: "Failed to update password. It must be at least 6 characters.")
+                onResult(false, e.message ?: "Failed to update password.")
             }
         }
     }
@@ -224,23 +219,17 @@ class AuthViewModel : ViewModel() {
     fun deleteAccount(onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
             try {
-                // 1. Apelăm funcția SQL pentru a șterge definitiv utilizatorul de pe server
+                // Apelăm RPC-ul de pe server pentru ștergere definitivă (Trigger SQL)
                 SupabaseClient.client.postgrest.rpc("delete_user")
 
-                // 2. Încercăm să dăm signOut local. Învăluim într-un try-catch intern
-                // pentru că dacă serverul dă eroare (deoarece user-ul e deja șters), o ignorăm.
                 try {
                     SupabaseClient.client.auth.signOut()
                 } catch (authError: Exception) {
-                    // Ignorăm eroarea de rețea, curățarea locală a sesiunii s-a făcut oricum
-                    Log.d("AUTH", "SignOut error ignored after account deletion: ${authError.message}")
+                    Log.d("AUTH", "SignOut ignored after deletion: ${authError.message}")
                 }
 
-                // 3. Curățăm datele din aplicație
                 currentUserProfile = null
                 currentUserAvatarId = 1
-
-                // 4. Întoarcem succes = true ca ecranul să poată schimba pagina!
                 onResult(true, "Account permanently deleted.")
             } catch (e: Exception) {
                 e.printStackTrace()

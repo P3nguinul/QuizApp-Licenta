@@ -1,4 +1,4 @@
-package com.ionut.quizapp.viewmodels // Asigură-te că pachetul este corect
+package com.ionut.quizapp.viewmodels
 
 import android.content.Context
 import android.content.SharedPreferences
@@ -21,14 +21,12 @@ class SoundManager(private val context: Context) {
     private var finishSoundId = 0
 
     // Setări pentru utilizator
-    // 1. Creăm sau deschidem fișierul local de setări
     private val prefs: SharedPreferences = context.getSharedPreferences("quiz_settings", Context.MODE_PRIVATE)
 
-    // 2. Transformăm variabilele simple în variabile inteligente care scriu/citesc din fișier
     var isMusicEnabled: Boolean
-        get() = prefs.getBoolean("music_enabled", true) // Citește din fișier (default: true)
+        get() = prefs.getBoolean("music_enabled", true)
         set(value) {
-            prefs.edit().putBoolean("music_enabled", value).apply() // Salvează în fișier
+            prefs.edit().putBoolean("music_enabled", value).apply()
         }
 
     var isSoundEnabled: Boolean
@@ -44,18 +42,18 @@ class SoundManager(private val context: Context) {
         }
 
     init {
-        // 1. Configurăm SoundPool pentru efectele scurte
+        // Configurăm SoundPool pentru efectele scurte
         val audioAttributes = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_GAME)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
             .build()
 
         soundPool = SoundPool.Builder()
-            .setMaxStreams(5) // Câte sunete pot rula simultan
+            .setMaxStreams(5)
             .setAudioAttributes(audioAttributes)
             .build()
 
-        // 2. Încărcăm fișierele scurte în memoria RAM
+        // Încărcăm fișierele scurte (Asigură-te că fișierele .mp3/.ogg există în res/raw)
         correctSoundId = soundPool.load(context, R.raw.correct, 1)
         wrongSoundId = soundPool.load(context, R.raw.wrong, 1)
         finishSoundId = soundPool.load(context, R.raw.quiz_finish, 1)
@@ -82,7 +80,7 @@ class SoundManager(private val context: Context) {
     }
 
     // ==========================================
-    // CONTROALE PENTRU TIMER (SUNET LUNG)
+    // CONTROALE PENTRU TIMER
     // ==========================================
 
     fun playTimerWarning() {
@@ -116,7 +114,7 @@ class SoundManager(private val context: Context) {
             bgMediaPlayer?.isLooping = true
             bgMediaPlayer?.setVolume(0.1f, 0.1f)
 
-            bgMediaPlayer?.setOnErrorListener { mp, what, extra ->
+            bgMediaPlayer?.setOnErrorListener { mp, _, _ ->
                 mp.reset()
                 bgMediaPlayer = null
                 true

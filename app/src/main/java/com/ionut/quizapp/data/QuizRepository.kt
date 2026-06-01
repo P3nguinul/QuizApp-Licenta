@@ -9,16 +9,16 @@ import io.github.jan.supabase.postgrest.rpc
 import io.github.jan.supabase.storage.storage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.add
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.*
 
 class QuizRepository {
+
     private val postgrest = SupabaseClient.client.postgrest
+    private val pdfBucket = SupabaseClient.client.storage.from("pdf_uploads")
+
+    // ==========================================
+    // GESTIONARE ÎNTREBĂRI (CORE & CUSTOM)
+    // ==========================================
 
     suspend fun fetchQuestions(isUtm: Boolean, categories: List<String>, count: Int): List<Question> {
         val dbCategories = mapCategoriesToDb(categories)
@@ -51,24 +51,20 @@ class QuizRepository {
 
     suspend fun fetchCustomQuestions(quizId: String): List<Question> {
         val response = SupabaseClient.client.from("custom_questions")
-            .select() {
-                filter {
-                    eq("quiz_id", quizId)
-                }
-            }.decodeList<JsonObject>() // Parsăm JSON-ul brut
+            .select {
+                filter { eq("quiz_id", quizId) }
+            }.decodeList<JsonObject>()
 
-        // Mapăm formatul din baza de date în clasa ta Question
         return response.map { item ->
             val optionsArray = item["options"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList()
             val correctAnswer = item["correct_answer"]?.jsonPrimitive?.content ?: ""
 
             Question(
                 id = item["id"]?.jsonPrimitive?.content?.hashCode() ?: 0,
-                category = "Custom AI Quiz", // Categorie generică pentru teste custom
-                difficulty = "Medium", // Dificultate implicită
+                category = "Custom AI Quiz",
+                difficulty = "Medium",
                 question_text = item["question_text"]?.jsonPrimitive?.content ?: "",
                 correct_answer = correctAnswer,
-                // Scoatem răspunsul corect din opțiuni pentru a lăsa doar incorrect_answers
                 incorrect_answers = optionsArray.filter { it != correctAnswer },
                 is_student_content = false
             )
@@ -79,80 +75,45 @@ class QuizRepository {
         return try {
             postgrest.rpc(
                 function = "get_category_counts",
-                parameters = kotlinx.serialization.json.buildJsonObject {
-                    put("is_utm_param", isUtm)
-                }
+                parameters = buildJsonObject { put("is_utm_param", isUtm) }
             ).decodeList<CategoryCountResponse>()
         } catch (e: Exception) {
             emptyList()
         }
     }
 
-    fun mapCategoriesToDb(uiCategories: List<String>): List<String> {
-        val mapping = mapOf(
-            "General Knowledge" to "General Knowledge",
-            "Films" to "Entertainment: Film",
-            "Music" to "Entertainment: Music",
-            "Television" to "Entertainment: Television",
-            "Video Games" to "Entertainment: Video Games",
-            "Science and Nature" to "Science & Nature",
-            "Computer Science" to "Science: Computers",
-            "Mathematics" to "Science: Mathematics",
-            "Sports" to "Sports",
-            "Geography" to "Geography",
-            "History" to "History",
-            "Animals" to "Animals",
-            "Vehicles" to "Vehicles",
-            "Japanese Anime & Manga" to "Entertainment: Japanese Anime & Manga",
-            "Comics" to "Entertainment: Comics"
-        )
-
-        if (uiCategories.contains("All Categories") || uiCategories.contains("All UTM")) {
-            return listOf("All")
-        }
-
-        return uiCategories.map { mapping[it] ?: it }
-    }
+    // ==========================================
+    // LEADERBOARD & STATISTICI
+    // ==========================================
 
     suspend fun updateTopScore(userId: String, username: String, newScore: Int, mode: String, isUtm: Boolean): Boolean {
         return try {
-            // 1. Căutăm dacă există deja un record pentru acest user, în acest mod ȘI acest tip (UTM/Normal)
             val existingEntry = SupabaseClient.client.from("leaderboard")
                 .select {
                     filter {
                         eq("user_id", userId)
                         eq("game_mode", mode)
-                        eq("is_utm", isUtm) // Foarte important pentru separare
+                        eq("is_utm", isUtm)
                     }
                 }.decodeSingleOrNull<LeaderboardEntry>()
 
             if (existingEntry == null) {
-                // 2. Dacă nu există, creăm unul nou
                 val newEntry = LeaderboardEntry(
-                    user_id = userId,
-                    username = username,
-                    score = newScore,
-                    game_mode = mode,
-                    is_utm = isUtm
+                    user_id = userId, username = username, score = newScore, game_mode = mode, is_utm = isUtm
                 )
                 SupabaseClient.client.from("leaderboard").insert(newEntry)
                 true
             } else if (newScore > existingEntry.score) {
-                // 3. Dacă există, dar scorul nou e mai mare, actualizăm
                 SupabaseClient.client.from("leaderboard").update(
                     {
                         set("score", newScore)
-                        set("username", username) // Actualizăm și numele în caz că s-a schimbat
+                        set("username", username)
                     }
                 ) {
-                    filter {
-                        eq("id", existingEntry.id!!) // Folosim ID-ul unic pentru update sigur
-                    }
+                    filter { eq("id", existingEntry.id!!) }
                 }
                 true
-            } else {
-                false // Nu este un record nou
-            }
+            } else false
         } catch (e: Exception) {
             e.printStackTrace()
             false
@@ -162,9 +123,7 @@ class QuizRepository {
     suspend fun getGlobalLeaderboard(mode: String, isUtm: Boolean): List<LeaderboardEntry> {
         return try {
             SupabaseClient.client.from("leaderboard")
-                .select(
-                    columns = io.github.jan.supabase.postgrest.query.Columns.raw("*, profiles(avatar_id)")
-                ) {
+                .select(columns = io.github.jan.supabase.postgrest.query.Columns.raw("*, profiles(avatar_id)")) {
                     filter {
                         eq("game_mode", mode)
                         eq("is_utm", isUtm)
@@ -173,9 +132,7 @@ class QuizRepository {
                     limit(15)
                 }.decodeList<LeaderboardEntry>()
         } catch (e: Exception) {
-            // AICI PRINDEM EROAREA FĂRĂ SĂ DĂM CRASH
             Log.e("SUPABASE_ERROR", "Eroare la Leaderboard JOIN: ${e.message}")
-            e.printStackTrace()
             emptyList()
         }
     }
@@ -189,7 +146,6 @@ class QuizRepository {
                         eq("game_mode", mode)
                         eq("is_utm", isUtm)
                     }
-                    // Sortăm descrescător după scor și luăm prima intrare
                     order("score", order = io.github.jan.supabase.postgrest.query.Order.DESCENDING)
                     limit(1)
                 }.decodeSingleOrNull<LeaderboardEntry>()
@@ -198,6 +154,10 @@ class QuizRepository {
             0
         }
     }
+
+    // ==========================================
+    // PROGRES ÎNVĂȚARE (LEARNING MODE)
+    // ==========================================
 
     suspend fun getAllUserProgress(userId: String, isUtm: Boolean): List<UserLearningProgress> {
         return try {
@@ -224,17 +184,14 @@ class QuizRepository {
         }
     }
 
-    private val pdfBucket = SupabaseClient.client.storage.from("pdf_uploads")
+    // ==========================================
+    // STOCARE PDF & AI QUIZZES
+    // ==========================================
 
     suspend fun uploadPdfForAi(fileName: String, fileBytes: ByteArray): String {
         return withContext(Dispatchers.IO) {
             try {
-                pdfBucket.upload(
-                    path = fileName,
-                    data = fileBytes,
-                    upsert = true
-                )
-
+                pdfBucket.upload(path = fileName, data = fileBytes, upsert = true)
                 pdfBucket.publicUrl(fileName)
             } catch (e: Exception) {
                 throw Exception("Failed to upload PDF: ${e.message}")
@@ -246,40 +203,26 @@ class QuizRepository {
         withContext(Dispatchers.IO) {
             try {
                 pdfBucket.delete(listOf(fileName))
-            } catch (e: Exception) {
-                // Erorile de ștergere sunt ignorate silențios
-            }
+            } catch (e: Exception) { /* Silențios */ }
         }
     }
 
-    suspend fun getCustomQuestionExplanation(questionText: String): String {
+    suspend fun fetchUserCustomQuizzes(userId: String): List<CustomQuiz> {
         return try {
-            val response = SupabaseClient.client.from("custom_questions")
+            SupabaseClient.client.from("custom_quizzes")
                 .select {
-                    filter {
-                        eq("question_text", questionText)
-                    }
-                }.decodeList<JsonObject>().firstOrNull()
-
-            // AICI ESTE MODIFICAREA: Folosim "ai_explanation"
-            response?.get("ai_explanation")?.jsonPrimitive?.content
-                ?: "The AI didn't provide a specific explanation for this question."
+                    filter { eq("user_id", userId) }
+                    order("created_at", order = io.github.jan.supabase.postgrest.query.Order.ASCENDING)
+                }.decodeList<CustomQuiz>()
         } catch (e: Exception) {
-            e.printStackTrace()
-            "Connection error while fetching explanation."
+            emptyList()
         }
     }
 
     suspend fun updateCustomQuizTitle(quizId: String, newTitle: String) {
         try {
-            SupabaseClient.client.from("custom_quizzes").update(
-                {
-                    set("title", newTitle) // Presupunând că ai o coloană "title"
-                }
-            ) {
-                filter {
-                    eq("id", quizId)
-                }
+            SupabaseClient.client.from("custom_quizzes").update({ set("title", newTitle) }) {
+                filter { eq("id", quizId) }
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -289,33 +232,75 @@ class QuizRepository {
     suspend fun deleteCustomQuiz(quizId: String): Boolean {
         return try {
             SupabaseClient.client.from("custom_quizzes").delete {
-                filter {
-                    eq("id", quizId)
-                }
+                filter { eq("id", quizId) }
             }
-            true // Am reușit!
+            true
         } catch (e: Exception) {
-            e.printStackTrace()
-            false // Am dat de bucluc
+            false
         }
     }
 
-    suspend fun fetchUserCustomQuizzes(userId: String): List<CustomQuiz> {
+    suspend fun getCustomQuestionExplanation(questionText: String): String {
         return try {
-            SupabaseClient.client.from("custom_quizzes")
+            val response = SupabaseClient.client.from("custom_questions")
                 .select {
-                    filter {
-                        eq("user_id", userId)
-                    }
-                    order("created_at", order = io.github.jan.supabase.postgrest.query.Order.DESCENDING)
-                }.decodeList<CustomQuiz>()
+                    filter { eq("question_text", questionText) }
+                }.decodeList<JsonObject>().firstOrNull()
+
+            response?.get("ai_explanation")?.jsonPrimitive?.content
+                ?: "The AI didn't provide a specific explanation for this question."
         } catch (e: Exception) {
-            e.printStackTrace()
-            emptyList()
+            "Connection error while fetching explanation."
         }
+    }
+
+    // ==========================================
+    // UTILS & MAPPING
+    // ==========================================
+
+    fun mapCategoriesToDb(uiCategories: List<String>): List<String> {
+        val mapping = mapOf(
+            "General Knowledge" to "General Knowledge",
+            "Films" to "Entertainment: Film",
+            "Music" to "Entertainment: Music",
+            "Television" to "Entertainment: Television",
+            "Video Games" to "Entertainment: Video Games",
+            "Science and Nature" to "Science & Nature",
+            "Computer Science" to "Science: Computers",
+            "Mathematics" to "Science: Mathematics",
+            "Sports" to "Sports",
+            "Geography" to "Geography",
+            "History" to "History",
+            "Animals" to "Animals",
+            "Vehicles" to "Vehicles",
+            "Japanese Anime & Manga" to "Entertainment: Japanese Anime & Manga",
+            "Comics" to "Entertainment: Comics",
+            "Tehnici Avansate de Programare" to "Tehnici Avansate de Programare",
+            "Inovare și Transformare Digitală" to "Inovare și Transformare Digitală",
+            "Comerț Electronic" to "Comerț Electronic",
+            "Criptografie" to "Criptografie",
+            "Administrarea Rețelelor de Calculatoare" to "Administrarea Rețelelor de Calculatoare",
+            "Metode Avansate De Programare (Java)" to "Metode Avansate De Programare (Java)",
+            "Sisteme de Gestiune a Bazelor de Date" to "Sisteme de Gestiune a Bazelor de Date",
+            "Programare Orientată pe Obiecte (C++)" to "Programare Orientată pe Obiecte (C++)",
+            "Tehnologii Web" to "Tehnologii Web",
+            "Sisteme de Operare" to "Sisteme de Operare",
+            "Fundamentele Programării" to "Fundamentele Programării",
+            "Programare în Python" to "Programare în Python",
+            "Algoritmi și Structuri de Date" to "Algoritmi și Structuri de Date",
+            "Cloud Computing" to "Cloud Computing",
+            "Baze de Date" to "Baze de Date"
+        )
+
+        if (uiCategories.contains("All Categories") || uiCategories.contains("All UTM")) {
+            return listOf("All")
+        }
+
+        return uiCategories.map { mapping[it] ?: it }
     }
 }
 
+// Helper extern pentru Uri
 fun Uri.toByteArray(context: Context): ByteArray? {
     return context.contentResolver.openInputStream(this)?.use { it.readBytes() }
 }

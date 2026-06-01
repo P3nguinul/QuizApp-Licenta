@@ -1,6 +1,5 @@
-package com.ionut.quizapp.ui
+package com.ionut.quizapp.features.profile
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,13 +15,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.ionut.quizapp.ui.theme.QuizTheme
+import com.ionut.quizapp.features.core.theme.QuizTheme
 import androidx.compose.ui.window.Dialog
+
 @Composable
 fun GuestWarningBanner(onLoginClick: () -> Unit) {
     Surface(
         shape = RoundedCornerShape(16.dp),
-        color = Color(0xFFFFF3E0), // Un portocaliu/amber deschis de avertizare prietenoasă
+        color = Color(0xFFFFF3E0), // Amber/Portocaliu deschis (Avertizare prietenoasă)
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp)
@@ -33,11 +33,13 @@ fun GuestWarningBanner(onLoginClick: () -> Unit) {
         ) {
             Icon(
                 imageVector = Icons.Default.Info,
-                contentDescription = "Info",
-                tint = Color(0xFFF57C00), // Portocaliu mai închis pentru contrast
+                contentDescription = "Guest Information",
+                tint = Color(0xFFF57C00),
                 modifier = Modifier.size(28.dp)
             )
+
             Spacer(modifier = Modifier.width(12.dp))
+
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "You are using a Guest account",
@@ -52,7 +54,9 @@ fun GuestWarningBanner(onLoginClick: () -> Unit) {
                     lineHeight = 16.sp
                 )
             }
+
             Spacer(modifier = Modifier.width(8.dp))
+
             TextButton(
                 onClick = onLoginClick,
                 colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFE65100))
@@ -63,6 +67,8 @@ fun GuestWarningBanner(onLoginClick: () -> Unit) {
     }
 }
 
+// ========================== DIALOGURI RESTRICȚIE (MODALS) ==========================
+
 @Composable
 fun LoginRequiredDialog(
     featureName: String,
@@ -70,29 +76,31 @@ fun LoginRequiredDialog(
     onDismiss: () -> Unit,
     onGoToLogin: () -> Unit
 ) {
-    // Folosim Dialog simplu pentru a avea control 100% asupra designului (fără marginile urâte din AlertDialog)
+    // Dialog personalizat pentru a evita stilul rigid de sistem al AlertDialog-ului
     Dialog(onDismissRequest = onDismiss) {
         Surface(
-            shape = RoundedCornerShape(32.dp), // Rotunjire modernă maximă
+            shape = RoundedCornerShape(32.dp),
             color = QuizTheme.colors.surface,
             tonalElevation = 8.dp,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 24.dp)
         ) {
             Column(
                 modifier = Modifier.padding(28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // 1. Iconiță Premium / Header vizual
+                // Iconiță Premium / Status
                 Surface(
                     shape = CircleShape,
-                    color = Color(0xFFFFF8E1), // Un galben pal
+                    color = Color(0xFFFFF8E1),
                     modifier = Modifier.size(72.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = Icons.Default.WorkspacePremium, // Icoană de Premium/Unlock
-                            contentDescription = null,
-                            tint = Color(0xFFFFB300), // Galben auriu
+                            imageVector = Icons.Default.WorkspacePremium,
+                            contentDescription = "Premium Feature",
+                            tint = Color(0xFFFFB300),
                             modifier = Modifier.size(36.dp)
                         )
                     }
@@ -100,7 +108,6 @@ fun LoginRequiredDialog(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // 2. Titlu
                 Text(
                     text = "Account Required",
                     style = MaterialTheme.typography.headlineSmall,
@@ -111,7 +118,6 @@ fun LoginRequiredDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // 3. Mesaj principal
                 Text(
                     text = "The $featureName is exclusive to registered members.",
                     style = MaterialTheme.typography.bodyMedium,
@@ -122,7 +128,6 @@ fun LoginRequiredDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // 4. Descriere detaliată
                 Text(
                     text = description,
                     fontSize = 14.sp,
@@ -133,7 +138,7 @@ fun LoginRequiredDialog(
 
                 Spacer(modifier = Modifier.height(32.dp))
 
-                // 5. Butonul Principal (Call to Action)
+                // Butoane de Acțiune
                 Button(
                     onClick = onGoToLogin,
                     modifier = Modifier
@@ -142,17 +147,25 @@ fun LoginRequiredDialog(
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = QuizTheme.colors.primary)
                 ) {
-                    Text("CREATE ACCOUNT", fontWeight = FontWeight.ExtraBold, fontSize = 15.sp, letterSpacing = 1.sp)
+                    Text(
+                        text = "CREATE ACCOUNT",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 15.sp,
+                        letterSpacing = 1.sp
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // 6. Butonul Secundar (Cancel)
                 TextButton(
                     onClick = onDismiss,
                     modifier = Modifier.fillMaxWidth().height(48.dp)
                 ) {
-                    Text("Maybe Later", color = QuizTheme.colors.textSecondary, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = "Maybe Later",
+                        color = QuizTheme.colors.textSecondary,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }

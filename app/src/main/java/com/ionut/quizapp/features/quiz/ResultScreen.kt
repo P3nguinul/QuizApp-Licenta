@@ -1,8 +1,7 @@
-package com.ionut.quizapp.ui
+package com.ionut.quizapp.features.quiz
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -23,8 +22,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.ionut.quizapp.logic.GameModeLogic
-import com.ionut.quizapp.ui.theme.QuizTheme
+import com.ionut.quizapp.features.core.theme.QuizColors
+import com.ionut.quizapp.features.core.theme.QuizTheme
+import com.ionut.quizapp.viewmodels.AnswerHistory
 import com.ionut.quizapp.viewmodels.QuizViewModel
 import com.ionut.quizapp.viewmodels.SoundManager
 
@@ -157,8 +157,8 @@ fun ResultScreen(
 
 @Composable
 fun AnswerReviewItem(
-    history: com.ionut.quizapp.viewmodels.AnswerHistory,
-    colors: com.ionut.quizapp.ui.theme.QuizColors,
+    history: AnswerHistory,
+    colors: QuizColors,
     isUtm: Boolean
 ){
 

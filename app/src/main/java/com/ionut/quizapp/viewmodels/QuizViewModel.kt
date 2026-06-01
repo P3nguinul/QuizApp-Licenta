@@ -1,5 +1,6 @@
 package com.ionut.quizapp.viewmodels
 
+import android.util.Log
 import androidx.compose.runtime.*
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -522,27 +523,36 @@ class QuizViewModel(
     // 9. LOGICĂ: SALVARE PROGRESS & STATISTICI
     // =========================================================================================
     private fun checkAndSaveScore() {
-        val user = currentUser
-        val isAnonymous = user?.appMetadata?.get("provider")?.jsonPrimitive?.content == "anonymous" || user == null
-        val shouldSave = isTimedMode || isSuddenDeathMode
+        val user = SupabaseClient.client.auth.currentUserOrNull()
 
-        if (!isAnonymous && user != null && shouldSave) {
-            viewModelScope.launch {
-                try {
-                    val username = user.userMetadata?.get("username")?.jsonPrimitive?.content ?: "Explorer"
-                    val modeName = if (isTimedMode) "Timed" else "Sudden Death"
+        // 1. Verificăm profilul din baza de date (dacă e disponibil)
+        // Trebuie să ne asigurăm că știm dacă userul curent este guest
+        viewModelScope.launch {
+            try {
+                // Interogăm tabela profiles pentru a vedea valoarea reală a coloanei is_guest
+                val profile = SupabaseClient.client.from("profiles")
+                    .select { filter { eq("id", user?.id ?: "") } }
+                    .decodeSingle<com.ionut.quizapp.data.UserProfile>()
 
-                    val result = repository.updateTopScore(
-                        userId = user.id,
-                        username = username,
-                        newScore = score,
-                        mode = modeName,
-                        isUtm = isUtmMode
-                    )
-                    isNewHighScore = result
-                } catch (e: Exception) {
-                    e.printStackTrace()
+                // 2. BLOCARE TOTALĂ: Dacă is_guest este true, ne oprim aici
+                if (profile.is_guest) {
+                    Log.d("QUIZ", "Utilizator Guest detectat în profiles, salvare blocată.")
+                    return@launch
                 }
+
+                // 3. Dacă am trecut de verificare, salvăm scorul
+                val modeName = if (isTimedMode) "Timed" else "Sudden Death"
+                val result = repository.updateTopScore(
+                    userId = user!!.id,
+                    username = profile.username,
+                    newScore = score,
+                    mode = modeName,
+                    isUtm = isUtmMode
+                )
+                isNewHighScore = result
+
+            } catch (e: Exception) {
+                Log.e("QUIZ", "Eroare la verificarea profilului pentru salvare: ${e.message}")
             }
         }
     }

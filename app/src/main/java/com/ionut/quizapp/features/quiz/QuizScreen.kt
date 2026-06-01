@@ -1,12 +1,14 @@
-package com.ionut.quizapp.ui
+package com.ionut.quizapp.features.quiz
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Timer
@@ -19,11 +21,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.ionut.quizapp.ui.theme.QuizTheme
+import com.ionut.quizapp.features.core.theme.QuizTheme
 import com.ionut.quizapp.viewmodels.QuizViewModel
 import com.ionut.quizapp.viewmodels.SoundManager
 import kotlinx.coroutines.delay
@@ -42,20 +44,16 @@ fun QuizScreen(
     onExit: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
-
     val colors = QuizTheme.colors
     val scope = rememberCoroutineScope()
 
     var showExitDialog by remember { mutableStateOf(false) }
-
-    // Stare locală pentru a colora butonul selectat înainte de a trece la următoarea întrebare
     var selectedAnswerIndex by remember { mutableStateOf<Int?>(null) }
 
     BackHandler {
-        showExitDialog = true // Afișăm modalul tău în loc să ieșim din ecran
+        showExitDialog = true
     }
 
-    // Încărcăm întrebările la pornire
     LaunchedEffect(Unit) {
         if (categories != "Custom") {
             viewModel.loadQuestions(isUtm, categories.split(","), count, mode)
@@ -64,7 +62,6 @@ fun QuizScreen(
 
     LaunchedEffect(viewModel.isGameOver) {
         if (viewModel.isGameOver) {
-            // Vibrație la final de test!
             if (soundManager.isVibrationEnabled) {
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             }
@@ -76,12 +73,6 @@ fun QuizScreen(
     LaunchedEffect(viewModel.timeLeft) {
         if (viewModel.isTimedMode && viewModel.timeLeft == 10 && !viewModel.isGameOver) {
             soundManager.playTimerWarning()
-        }
-    }
-
-    LaunchedEffect(viewModel.isGameOver) {
-        if (viewModel.isGameOver) {
-            soundManager.stopTimerWarning() // Tăiem firul sunetului!
         }
     }
 
@@ -97,8 +88,8 @@ fun QuizScreen(
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         }
                         showExitDialog = false
-                        viewModel.resetQuizState() // Curățăm starea
-                        onExit() // Navigăm înapoi la meniu
+                        viewModel.resetQuizState()
+                        onExit()
                     }
                 ) {
                     Text("QUIT", color = Color.Red, fontWeight = FontWeight.Bold)
@@ -123,9 +114,7 @@ fun QuizScreen(
             CircularProgressIndicator(color = colors.primary)
         }
     } else {
-
         if (viewModel.questions.isNotEmpty()) {
-            // Luăm mereu prima întrebare din listă (Coadă)
             val currentQuestion = viewModel.questions[0]
 
             Scaffold(
@@ -140,14 +129,11 @@ fun QuizScreen(
                             )
                         },
                         navigationIcon = {
-                            IconButton(onClick = {
-                                showExitDialog = true
-                            }) {
+                            IconButton(onClick = { showExitDialog = true }) {
                                 Icon(Icons.Default.Close, contentDescription = "Exit")
                             }
                         },
                         actions = {
-                            // Afișăm butonul SKIP DOAR dacă NU suntem în modul contra-cronometru
                             if (!viewModel.isTimedMode && mode != "Sudden Death") {
                                 TextButton(onClick = {
                                     if (selectedAnswerIndex == null) {
@@ -172,114 +158,77 @@ fun QuizScreen(
                 ) {
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // --- ZONA DINAMICĂ: CRONOMETRU vs BARA DE PROGRES ---
+                    // --- HEADER (Rămâne fix sus) ---
                     if (viewModel.isTimedMode) {
-                        // Design pentru modul AGAINST TIME
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = androidx.compose.material.icons.Icons.Default.Timer,
-                                contentDescription = null,
-                                tint = if (viewModel.timeLeft < 10) Color.Red else colors.primary,
-                                modifier = Modifier.size(28.dp)
-                            )
+                            Icon(Icons.Default.Timer, null, tint = if (viewModel.timeLeft < 10) Color.Red else colors.primary, modifier = Modifier.size(28.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text(
-                                text = "${viewModel.timeLeft}s",
-                                style = MaterialTheme.typography.headlineMedium,
-                                fontWeight = FontWeight.Black,
-                                color = if (viewModel.timeLeft < 10) Color.Red else colors.textMain
-                            )
+                            Text("${viewModel.timeLeft}s", fontWeight = FontWeight.Black, fontSize = 24.sp)
                         }
-
-                        // Opțional: O bară care scade vizual odată cu timpul
                         LinearProgressIndicator(
                             progress = { viewModel.timeLeft / 60f },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 8.dp)
-                                .height(6.dp)
-                                .clip(CircleShape),
-                            color = if (viewModel.timeLeft < 10) Color.Red else colors.primary,
-                            trackColor = colors.primary.copy(alpha = 0.1f)
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(6.dp).clip(CircleShape),
+                            color = if (viewModel.timeLeft < 10) Color.Red else colors.primary
                         )
                     } else if (mode == "Sudden Death") {
-                        // --- DESIGN EXCLUSIV PENTRU SUDDEN DEATH ---
-                        val currentStreak = viewModel.score
-
-                        // Desenăm o bară plină/activă care sugerează un modul de tip survival/trofeu
-                        LinearProgressIndicator(
-                            progress = { 1f }, // O lăsăm plină în permanență
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(10.dp)
-                                .clip(CircleShape),
-                            // Roșu aprins pentru modul normal (pericol de moarte subită) sau Culoarea temei pentru UTM
-                            color = if (isUtm) colors.primary else Color(0xFFE53935),
-                            trackColor = colors.primary.copy(alpha = 0.1f)
-                        )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "STREAK: $currentStreak 🔥",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Black,
-                                color = if (isUtm) colors.primary else Color(0xFFE53935)
-                            )
-                            Text(
-                                text = "No mistakes allowed!",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = colors.textSecondary
-                            )
-                        }
+                        Text("STREAK: ${viewModel.score} 🔥", fontWeight = FontWeight.Black, color = if (isUtm) colors.primary else Color(0xFFE53935))
                     } else {
-                        // Design pentru modul CLASSIC (Bara de progres normală)
                         val answeredCount = viewModel.quizHistory.size
-                        val progress = answeredCount.toFloat() / count
-
                         LinearProgressIndicator(
-                            progress = { progress },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(10.dp)
-                                .clip(CircleShape),
-                            color = if (isUtm) colors.primary else Color(0xFF4CAF50),
-                            trackColor = colors.primary.copy(alpha = 0.1f)
+                            progress = { answeredCount.toFloat() / count },
+                            modifier = Modifier.fillMaxWidth().height(10.dp).clip(CircleShape),
+                            color = if (isUtm) colors.primary else Color(0xFF4CAF50)
                         )
-
-                        Text(
-                            text = "${answeredCount + 1} / $count",
-                            modifier = Modifier.padding(top = 8.dp),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = colors.textSecondary
-                        )
+                        Text("${answeredCount + 1} / $count", modifier = Modifier.padding(top = 8.dp), fontWeight = FontWeight.Bold, color = colors.textSecondary)
                     }
 
                     Spacer(modifier = Modifier.height(32.dp))
 
-                    // --- ÎNTREBAREA ---
-                    Text(
-                        text = currentQuestion.question_text,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Black,
-                        color = colors.textMain,
-                        lineHeight = 32.sp
-                    )
+                    // --- ZONA CERINȚEI (CAPSULA FIXĂ CU SCROLL INTERN) ---
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 280.dp) // Am pus o limită de înălțime ca să nu fure tot ecranul
+                            .padding(bottom = 16.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        color = colors.surface.copy(alpha = 0.6f),
+                        border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.2f))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(16.dp)
+                                .verticalScroll(rememberScrollState()) // Scroll doar dacă cerința e gigantă
+                        ) {
+                            Text(
+                                text = currentQuestion.question_text,
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontFamily = if (isUtm) FontFamily.Monospace else FontFamily.Default,
+                                    fontWeight = if (isUtm) FontWeight.Medium else FontWeight.ExtraBold,
+                                    fontSize = if (isUtm) 15.sp else 20.sp,
+                                    lineHeight = if (isUtm) 22.sp else 28.sp
+                                ),
+                                color = colors.textMain
+                            )
+                        }
+                    }
 
-                    Spacer(modifier = Modifier.height(40.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                    // --- LISTA DE OPȚIUNI (Rămâne la fel) ---
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        viewModel.currentOptions.forEachIndexed { index, option ->
+                    // --- ZONA RĂSPUNSURILOR (SINGURA CARE SCROLLEAZĂ LIBER) ---
+                    // weight(1f) face ca această listă să ocupe tot spațiul rămas liber jos
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(bottom = 24.dp)
+                    ) {
+                        // Folosim itemsIndexed în loc de forEachIndexed pentru LazyColumn
+                        items(viewModel.currentOptions.size) { index ->
+                            val option = viewModel.currentOptions[index]
                             val isCorrect = option == currentQuestion.correct_answer
                             val isSelected = selectedAnswerIndex == index
 
@@ -298,22 +247,10 @@ fun QuizScreen(
 
                             Surface(
                                 onClick = {
-                                    if (selectedAnswerIndex == null) { // Dacă n-a apăsat deja pe ceva
+                                    if (selectedAnswerIndex == null) {
                                         selectedAnswerIndex = index
-
-                                        // 1. Vibrație instantanee la apăsare
-                                        if (soundManager.isVibrationEnabled) {
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        }
-
-                                        // 2. Redăm sunetul instantaneu!
-                                        if (isCorrect) { // Folosim `isCorrect` care era deja definit mai sus de tine
-                                            soundManager.playCorrect()
-                                        } else {
-                                            soundManager.playWrong()
-                                        }
-
-                                        // 3. Așteptăm o secundă ca să vadă culoarea, apoi trimitem răspunsul
+                                        if (soundManager.isVibrationEnabled) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        if (isCorrect) soundManager.playCorrect() else soundManager.playWrong()
                                         scope.launch {
                                             delay(1000)
                                             viewModel.submitAnswer(option)
@@ -323,15 +260,12 @@ fun QuizScreen(
                                 },
                                 shape = RoundedCornerShape(16.dp),
                                 color = containerColor,
-                                // ADĂUGĂM BORDURĂ ȘI ELEVATION PENTRU CLARITATE
                                 border = BorderStroke(
                                     width = 1.dp,
                                     color = if (isSelected) Color.Transparent else Color.LightGray.copy(alpha = 0.5f)
                                 ),
-                                shadowElevation = 4.dp, // Aceasta va crea profunzime
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp) // Reducem puțin padding-ul vertical să nu fie prea răsfirate
+                                shadowElevation = 4.dp,
+                                modifier = Modifier.fillMaxWidth()
                             ) {
                                 Row(
                                     modifier = Modifier.padding(20.dp),
@@ -340,8 +274,9 @@ fun QuizScreen(
                                     Text(
                                         text = option,
                                         style = MaterialTheme.typography.bodyLarge.copy(
+                                            fontFamily = if (isUtm) FontFamily.Monospace else FontFamily.Default,
                                             fontWeight = FontWeight.Bold,
-                                            fontSize = 18.sp // Puțin mai mare pentru lizibilitate
+                                            fontSize = if (isUtm) 15.sp else 18.sp
                                         ),
                                         color = contentColor
                                     )
@@ -349,6 +284,9 @@ fun QuizScreen(
                             }
                         }
                     }
+
+                    // Spațiu extra jos ca butoanele să nu stea lipite de marginea telefonului
+                    Spacer(modifier = Modifier.navigationBarsPadding())
                 }
             }
         } else if (!viewModel.isGameOver) {

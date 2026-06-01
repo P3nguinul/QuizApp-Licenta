@@ -13,12 +13,24 @@ import kotlinx.serialization.json.put
 
 class AiRepository {
 
+    // ==========================================
+    // CONSTANTE SI CONFIGURARE
+    // ==========================================
+
+    private val FUNCTION_NAME = "generate-explanation"
+    private val KEY_EXPLANATION = "explanation"
+
+
+    // ==========================================
+    // LOGICA DE GENERARE EXPLICATII (AI)
+    // ==========================================
+
     suspend fun getExplanation(questionId: Int, isUtm: Boolean): String {
         return withContext(Dispatchers.IO) {
             try {
-                // Apelăm Edge Function-ul creat pe Supabase
+                // 1. Apelăm Edge Function-ul de pe serverul Supabase
                 val response = SupabaseClient.client.functions.invoke(
-                    "generate-explanation",
+                    function = FUNCTION_NAME,
                     body = buildJsonObject {
                         put("question_id", questionId)
                         put("is_utm", isUtm)
@@ -27,14 +39,16 @@ class AiRepository {
 
                 val responseText = response.bodyAsText()
 
-                // Funcția noastră din Cloud returnează: { "explanation": "textul..." }
+                // 2. Parsăm răspunsul JSON primit de la Edge Function
                 val responseJson = Json.parseToJsonElement(responseText).jsonObject
-                responseJson["explanation"]?.jsonPrimitive?.content
+
+                // 3. Returnăm textul explicației sau un mesaj de fallback
+                responseJson[KEY_EXPLANATION]?.jsonPrimitive?.content
                     ?: "Could not generate an explanation at this time."
 
             } catch (e: Exception) {
                 Log.e("AI_ERROR", "Error calling Edge Function: ${e.message}")
-                "Connection error. Please try again."
+                "Connection error. Please try again later."
             }
         }
     }
