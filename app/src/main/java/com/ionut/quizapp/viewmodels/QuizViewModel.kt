@@ -150,6 +150,7 @@ class QuizViewModel(
     fun loadQuestions(isUtm: Boolean, selectedCategories: List<String>, count: Int, mode: String) {
         resetQuizState()
         isLoading = true
+        errorMessage = null
 
         currentGameLogic = when (mode) {
             "Against Time" -> GameModeLogic.AgainstTime
@@ -177,11 +178,18 @@ class QuizViewModel(
                     if (isTimedMode) startTimer()
                     isGameOver = false
                 } else {
-                    isGameOver = true
+                    errorMessage = "No questions were found for the selection made."
+                    isGameOver = false
                 }
+            } catch (e: java.net.UnknownHostException) {
+
+                e.printStackTrace()
+                errorMessage = "The internet connection has been lost. Please check the network and try again!"
+                isGameOver = false
             } catch (e: Exception) {
                 e.printStackTrace()
-                isGameOver = true
+                errorMessage = "An error occurred while downloading the questions: ${e.localizedMessage}"
+                isGameOver = false
             } finally {
                 isLoading = false
             }

@@ -56,7 +56,7 @@ class AuthViewModel : ViewModel() {
     // LOGICA DE AUTENTIFICARE
     // ==========================================
 
-    fun signUp(userEmail: String, userPass: String, username: String, onResult: (Boolean) -> Unit) {
+    fun signUp(userEmail: String, userPass: String, username: String, onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
             try {
                 SupabaseClient.client.auth.signUpWith(Email) {
@@ -66,25 +66,45 @@ class AuthViewModel : ViewModel() {
                         put("username", username)
                     }
                 }
-                onResult(true)
+                onResult(true, "Registration successful!")
             } catch (e: Exception) {
-                e.printStackTrace()
-                onResult(false)
+                val errorMsg = e.message ?: ""
+                val friendlyMessage = when {
+                    errorMsg.contains("Unable to resolve host", ignoreCase = true) ||
+                            errorMsg.contains("ConnectException", ignoreCase = true) -> {
+                        "Connection lost. Please check your network and try again."
+                    }
+                    errorMsg.contains("already registered", ignoreCase = true) || errorMsg.contains("422") -> {
+                        "This email address is already in use."
+                    }
+                    else -> "Registration failed. Please try again later."
+                }
+                onResult(false, friendlyMessage)
             }
         }
     }
 
-    fun loginAsUser(userEmail: String, userPass: String, onResult: (Boolean) -> Unit) {
+    fun loginAsUser(userEmail: String, userPass: String, onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
             try {
                 SupabaseClient.client.auth.signInWith(Email) {
                     email = userEmail
                     password = userPass
                 }
-                onResult(true)
+                onResult(true, "Login successful!")
             } catch (e: Exception) {
-                e.printStackTrace()
-                onResult(false)
+                val errorMsg = e.message ?: ""
+                val friendlyMessage = when {
+                    errorMsg.contains("Unable to resolve host", ignoreCase = true) ||
+                            errorMsg.contains("ConnectException", ignoreCase = true) -> {
+                        "Connection lost. Please check your network and try again."
+                    }
+                    errorMsg.contains("Invalid login credentials", ignoreCase = true) || errorMsg.contains("400") -> {
+                        "Invalid email or password. Please check your credentials."
+                    }
+                    else -> "Login failed. Please try again later."
+                }
+                onResult(false, friendlyMessage)
             }
         }
     }
@@ -197,7 +217,25 @@ class AuthViewModel : ViewModel() {
                 onResult(true, "Username updated successfully!")
             } catch (e: Exception) {
                 e.printStackTrace()
-                onResult(false, e.message ?: "Failed to update username.")
+
+                val errorMsg = e.message ?: ""
+                val userFriendlyMessage = when {
+
+                    errorMsg.contains("Unable to resolve host", ignoreCase = true) ||
+                            errorMsg.contains("No address associated", ignoreCase = true) ||
+                            errorMsg.contains("ConnectException", ignoreCase = true) -> {
+                        "Connection lost. Please check your network and try again."
+                    }
+
+                    errorMsg.contains("duplicate", ignoreCase = true) || errorMsg.contains("23505") -> {
+                        "This username is already taken. Please choose another one."
+                    }
+
+                    else -> {
+                        "Could not update username. Please try again later."
+                    }
+                }
+                onResult(false, userFriendlyMessage)
             }
         }
     }
@@ -210,8 +248,23 @@ class AuthViewModel : ViewModel() {
                 }
                 onResult(true, "Password updated successfully!")
             } catch (e: Exception) {
-                e.printStackTrace()
-                onResult(false, e.message ?: "Failed to update password.")
+
+                val errorMsg = e.message ?: ""
+                val userFriendlyMessage = when {
+
+                    errorMsg.contains("Unable to resolve host", ignoreCase = true) ||
+                            errorMsg.contains("No address associated", ignoreCase = true) ||
+                            errorMsg.contains("ConnectException", ignoreCase = true) -> {
+                        "Connection lost. Please check your network and try again."
+                    }
+                    errorMsg.contains("weak", ignoreCase = true) || errorMsg.contains("characters", ignoreCase = true) -> {
+                        "The password is too weak. It must be at least 6 characters long."
+                    }
+                    else -> {
+                        "Could not update password. Please try again later."
+                    }
+                }
+                onResult(false, userFriendlyMessage)
             }
         }
     }
@@ -232,8 +285,18 @@ class AuthViewModel : ViewModel() {
                 currentUserAvatarId = 1
                 onResult(true, "Account permanently deleted.")
             } catch (e: Exception) {
-                e.printStackTrace()
-                onResult(false, e.message ?: "Failed to delete account.")
+                val errorMsg = e.message ?: ""
+                val userFriendlyMessage = when {
+                    errorMsg.contains("Unable to resolve host", ignoreCase = true) ||
+                            errorMsg.contains("No address associated", ignoreCase = true) ||
+                            errorMsg.contains("ConnectException", ignoreCase = true) -> {
+                        "Connection lost. Could not reach the server to delete your account."
+                    }
+                    else -> {
+                        "An error occurred while deleting your account. Please try again later."
+                    }
+                }
+                onResult(false, userFriendlyMessage)
             }
         }
     }

@@ -113,6 +113,54 @@ fun QuizScreen(
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = colors.primary)
         }
+    } else if (viewModel.errorMessage != null) {
+        // --- ACESTA ESTE ECRANUL NOU CARE APĂRE CÂND NU AI INTERNET ---
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(bgGradient)
+                .padding(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "Connection Error",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFFF44336),
+                    fontSize = 24.sp
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = viewModel.errorMessage ?: "An unexpected error occurred.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = colors.textSecondary,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(
+                    onClick = {
+                        if (categories != "Custom") {
+                            viewModel.loadQuestions(isUtm, categories.split(","), count, mode)
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("RETRY", fontWeight = FontWeight.Bold, color = Color.White)
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                TextButton(onClick = {
+                    viewModel.resetQuizState()
+                    onExit()
+                }) {
+                    Text("Back to Menu", color = colors.primary)
+                }
+            }
+        }
     } else {
         if (viewModel.questions.isNotEmpty()) {
             val currentQuestion = viewModel.questions[0]

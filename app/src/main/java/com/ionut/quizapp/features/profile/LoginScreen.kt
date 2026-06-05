@@ -48,10 +48,10 @@ fun LoginScreen(
             if (validateLoginInputs(email, password) { errorMessage = it }) {
                 isLoading = true
                 errorMessage = null
-                viewModel.loginAsUser(email, password) { success ->
+                viewModel.loginAsUser(email, password) { success, message ->
                     isLoading = false
                     if (success) onLoginSuccess()
-                    else errorMessage = "Login failed! Check your credentials."
+                    else errorMessage = message
                 }
             }
         }
